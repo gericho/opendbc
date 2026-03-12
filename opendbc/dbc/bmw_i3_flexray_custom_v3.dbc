@@ -1,0 +1,84 @@
+VERSION "BMW i3 FlexRay custom draft v3"
+
+NS_ :
+  NS_DESC_
+  CM_
+  BA_DEF_
+  BA_
+  VAL_
+  CAT_DEF_
+  CAT_
+  FILTER
+  BA_DEF_DEF_
+  EV_DATA_
+  ENVVAR_DATA_
+  SGTYPE_
+  SGTYPE_VAL_
+  BA_DEF_SGTYPE_
+  BA_SGTYPE_
+  SIG_TYPE_REF_
+  VAL_TABLE_
+  SIG_GROUP_
+  SIG_VALTYPE_
+  SIGTYPE_VALTYPE_
+  BO_TX_BU_
+  BA_DEF_REL_
+  BA_REL_
+  BA_DEF_DEF_REL_
+  BU_SG_REL_
+  BU_EV_REL_
+  BU_BO_REL_
+  SG_MUL_VAL_
+
+BS_:
+
+BU_: BMW_I3
+
+CM_ "Draft DBC derived from user's BMW i3 FlexRay logs. Address 27 was not observed in any uploaded segment. Signals below are a mix of confirmed, provisional, and experimental candidates.";
+
+BO_ 46 WHEEL_SPEED: 17 BMW_I3
+ SG_ FL_SPEED_RAW : 8|16@1+ (0.03125,0) [0|300] "kph" BMW_I3
+ SG_ FR_SPEED_RAW : 24|16@1+ (0.03125,0) [0|300] "kph" BMW_I3
+ SG_ RL_SPEED_RAW : 40|16@1+ (0.03125,0) [0|300] "kph" BMW_I3
+ SG_ RR_SPEED_RAW : 56|16@1+ (0.03125,0) [0|300] "kph" BMW_I3
+
+BO_ 49 STEER_TORQUE: 17 BMW_I3
+ SG_ DRIVER_STEER_TORQUE_RAW : 8|16@1- (0.01,0) [-50|50] "Nm" BMW_I3
+ SG_ STEER_TORQUE_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
+
+BO_ 51 EPS_ANGLE: 17 BMW_I3
+ SG_ STEERING_ANGLE_RAW : 8|16@1- (0.1,0) [-1000|1000] "deg" BMW_I3
+ SG_ EPS_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
+
+BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
+ SG_ VEHICLE_SPEED_RAW_A : 8|16@1+ (0.03125,0) [0|300] "kph" BMW_I3
+ SG_ VEHICLE_SPEED_RAW_B : 24|16@1+ (0.03125,0) [0|300] "kph" BMW_I3
+
+BO_ 56 DYNAMICS_YAW_PROV: 17 BMW_I3
+ SG_ YAW_RATE_RAW_A : 8|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
+ SG_ YAW_RATE_RAW_B : 24|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
+
+BO_ 40 DRIVE_STATE_EXPERIMENTAL: 17 BMW_I3
+ SG_ DRIVE_STATE_RAW : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ DRIVE_MODE_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
+
+BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
+ SG_ BRAKE_REGEN_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BRAKE_REGEN_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental. Address 44 changed between moving and stopped states, but did not cleanly isolate pedal-vs-regen by itself.";
+
+BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
+ SG_ BRAKE_BLEND_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BRAKE_BLEND_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BRAKE_BLEND_STATE_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ SG_ 54 BRAKE_BLEND_STATE_A "Experimental. Address 54 differed between regen-stop and pedal-stop windows and may reflect brake blending, chassis, or torque request state.";
+
+BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
+ SG_ PEDAL_HOLD_STATE_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ PEDAL_HOLD_STATE_AUX : 32|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Experimental but strongest brake-related candidate from user logs. Byte pair around bits 16..31 shifted from approx 0x8040 during regen/coast stop to approx 0x8012 during pedal stop / hold-like windows.";
+
+BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
+ SG_ CHASSIS_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ SG_ 43 CHASSIS_STATE_A "Experimental. Changes with dynamic state, but weaker than address 59 for brake-related hypotheses.";

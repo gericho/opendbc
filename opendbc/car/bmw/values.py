@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from opendbc.car.docs_definitions import CarDocs
+from opendbc.car.docs_definitions import CarDocs, CarHarness, CarParts, SupportType
 
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CarSpecs, DbcDict, PlatformConfig, Platforms
 from opendbc.car.lateral import AngleSteeringLimits, ISO_LATERAL_ACCEL
@@ -19,8 +19,11 @@ class BMWPlatformConfig(PlatformConfig):
 
 @dataclass
 class BMWCarDocs(CarDocs):
-  name: str = "BMW SP2018"
+  name: str = "BMW SP2018 2018-24"
   package: str = "5AU"
+  car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.custom]))
+  support_type: SupportType = SupportType.COMMUNITY
+  support_link: str | None = None
 class CAR(Platforms):
   BMW_SP2018 = BMWPlatformConfig(
     [BMWCarDocs()],
@@ -50,4 +53,3 @@ class CarControllerParams:
 
   # Angle command is sent every other frame (~50 Hz when DT_CTRL=100 Hz)
   STEER_STEP = 2
-

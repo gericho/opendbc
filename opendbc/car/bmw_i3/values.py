@@ -8,7 +8,7 @@ class BMWI3PlatformConfig(PlatformConfig):
 
 class CAR(Platforms):
   BMW_I3_EXPERIMENTAL = BMWI3PlatformConfig(
-    ["BMW i3 Experimental FlexRay"],
+    [],
     CarSpecs(
       mass=1365.0,
       wheelbase=2.57,

@@ -1,4 +1,5 @@
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms
+from opendbc.car.fw_query_definitions import FwQueryConfig
 
 
 class BMWI3PlatformConfig(PlatformConfig):
@@ -19,3 +20,6 @@ class CAR(Platforms):
 
 
 DBC = CAR.create_dbc_map()
+
+# FlexRay-only experimental platform: no UDS FW querying path yet.
+FW_QUERY_CONFIG = FwQueryConfig(requests=[])

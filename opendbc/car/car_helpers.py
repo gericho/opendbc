@@ -16,6 +16,23 @@ from opendbc.sunnypilot.car.interfaces import setup_interfaces as sunnypilot_int
 FRAME_FINGERPRINT = 100  # 1s
 
 
+def _get_fingerprint_buses() -> list[int]:
+  # Default keeps legacy behavior and adds common FlexRay/CAN gateway buses used in PC setups.
+  raw = os.environ.get("FINGERPRINT_BUSES", "0,1,13,23,24")
+  buses: list[int] = []
+  for tok in raw.split(","):
+    tok = tok.strip()
+    if not tok:
+      continue
+    try:
+      b = int(tok)
+      if 0 <= b < 128 and b not in buses:
+        buses.append(b)
+    except ValueError:
+      continue
+  return buses if buses else [0, 1]
+
+
 def load_interfaces(brand_names):
   ret = {}
   for brand_name in brand_names:
@@ -43,7 +60,8 @@ interfaces = load_interfaces(interface_names)
 
 def can_fingerprint(can_recv: CanRecvCallable) -> tuple[str | None, dict[int, dict]]:
   finger = gen_empty_fingerprint()
-  candidate_cars = {i: all_legacy_fingerprint_cars() for i in [0, 1]}  # attempt fingerprint on both bus 0 and 1
+  fp_buses = _get_fingerprint_buses()
+  candidate_cars = {i: all_legacy_fingerprint_cars() for i in fp_buses}
   frame = 0
   car_fingerprint = None
   done = False

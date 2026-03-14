@@ -71,14 +71,62 @@ BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
  SG_ BRAKE_BLEND_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_BLEND_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_BLEND_STATE_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 54 BRAKE_BLEND_STATE_A "Experimental. Address 54 differed between regen-stop and pedal-stop windows and may reflect brake blending, chassis, or torque request state.";
+ CM_ SG_ 54 BRAKE_BLEND_STATE_A "Experimental. Address 54 reacts during coast-to-regen transitions and automatic deceleration windows. In TJA logs, STATE_B/STATE_C changed more clearly during roundabout follow and release-of-accelerator windows than during steady manual pedal application, so this frame is a stronger brake-blend / regen-support candidate than address 44.";
 
 BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
  SG_ PEDAL_HOLD_STATE_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ PEDAL_HOLD_STATE_AUX : 32|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Experimental but strongest brake-related candidate from user logs. Byte pair around bits 16..31 shifted from approx 0x8040 during regen/coast stop to approx 0x8012 during pedal stop / hold-like windows.";
+ CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Experimental but strongest pedal / coast / hold candidate from user logs. Across multiple TJA sessions, this field moved from high values during clear manual accelerator application to much lower values during release-to-regen and ACC-managed distance holding windows, making it the current best candidate for pedal-state or hold-state inference.";
 
 BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ SG_ 43 CHASSIS_STATE_A "Experimental. Changes with dynamic state, but weaker than address 59 for brake-related hypotheses.";
+
+BO_ 102 COLUMN_SWITCH_CANDIDATE: 17 BMW_I3
+ SG_ COLUMN_SWITCH_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ COLUMN_SWITCH_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ COLUMN_SWITCH_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ COLUMN_SWITCH_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 102 "Experimental column-switch / indicator candidate. In the parked command-isolation route, this frame changed clearly during right/left indicator windows and also moved with some ACC/TJA button presses. Treat as a likely steering-column input frame rather than pure ADAS state.";
+
+BO_ 106 ACC_STALK_TJA_CANDIDATE_A: 17 BMW_I3
+ SG_ ACC_STALK_TJA_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 106 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Changed coherently around SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, and ACC off windows. Byte pair around bits 24..39 stayed stable enough for comparison across sessions, but no clean bit-level interpretation is confirmed yet.";
+
+BO_ 112 ACC_STALK_TJA_CANDIDATE_B: 17 BMW_I3
+ SG_ ACC_STALK_TJA_B_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_B_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_B_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_B_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 112 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. This frame moved with the same event set as 106 and appears on src24, making it a good candidate for ADAS state or command echo on the ECU-side FlexRay group.";
+
+BO_ 116 ACC_STALK_TJA_CANDIDATE_C: 17 BMW_I3
+ SG_ ACC_STALK_TJA_C_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_C_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_C_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_C_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 116 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Changed with SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, blinker windows, and ACC off. Likely related to driver-assistance command or command echo rather than pure vehicle dynamics.";
+
+BO_ 124 ACC_STALK_TJA_CANDIDATE_D: 17 BMW_I3
+ SG_ ACC_STALK_TJA_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_D_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 124 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Strongly correlated with SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, and ACC off. This frame is a priority candidate for future bit-level extraction of ACC/TJA state.";
+
+BO_ 256 ACC_STALK_TJA_CANDIDATE_E: 17 BMW_I3
+ SG_ ACC_STALK_TJA_E_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_E_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_E_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 256 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Small payload frame that changed consistently at SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, blinker windows, and ACC off. Good candidate for compact command-state or resume-state signaling.";
+
+BO_ 275 ACC_STALK_TJA_CANDIDATE_F: 17 BMW_I3
+ SG_ ACC_STALK_TJA_F_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_F_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_F_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_STALK_TJA_F_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 275 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Most promising new control-state frame so far: it changed at SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, multiple blinker windows, and ACC off. Treat as top candidate for stalk-command or ADAS command aggregation.";

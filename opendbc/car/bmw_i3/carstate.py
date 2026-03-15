@@ -36,8 +36,8 @@ class CarState(CarStateBase):
     ret.brake = float(cp.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
     ret.gasPressed = False
 
-    pedal_or_hold_raw = int(cp.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0))
-    ret.brakePressed = pedal_or_hold_raw != 0
+    brake_can_byte1 = int(cp.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
+    ret.brakePressed = brake_can_byte1 < 0x10
 
     gear_raw = int(cp.vl.get("DRIVE_STATE_EXPERIMENTAL", {}).get("DRIVE_STATE_RAW", 0))
     ret.gearShifter = {
@@ -76,5 +76,6 @@ class CarState(CarStateBase):
       ("DRIVE_STATE_EXPERIMENTAL", 50),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", 50),
       ("BRAKE_BLEND_CANDIDATE_B", 50),
+      ("PTCAN_BRAKE_PRESSED_CANDIDATE", 50),
     ]
     return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], messages, 0)}

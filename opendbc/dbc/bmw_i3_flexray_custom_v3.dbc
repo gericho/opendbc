@@ -130,3 +130,38 @@ BO_ 275 ACC_STALK_TJA_CANDIDATE_F: 17 BMW_I3
  SG_ ACC_STALK_TJA_F_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_F_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ BO_ 275 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Most promising new control-state frame so far: it changed at SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, multiple blinker windows, and ACC off. Treat as top candidate for stalk-command or ADAS command aggregation.";
+
+
+BO_ 217 PTCAN_ACCELERATOR_CANDIDATE: 8 BMW_I3
+ SG_ ACCEL_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACCEL_BYTE_0_PT_CAN : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACCEL_BYTE_1_PT_CAN : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACCELERATOR_I4_COMPAT_PT_CAN : 16|12@1+ (0.000244,0) [0|2047] "" BMW_I3
+CM_ BO_ 217 "Experimental PT-CAN candidate from parked command-isolation routes. The first 16 bits changed strongly during the two isolated accelerator presses and stayed comparatively stable elsewhere. Cross-check against smnogar BMW i4 SP2018 DBC showed that bits 16|12 also behave like an accelerator field on the i3 routes, so this frame remains the best current PT-CAN accelerator-family candidate on CAN src 2.";
+
+BO_ 239 PTCAN_CRUISE_BUTTONS_AUX: 8 BMW_I3
+ SG_ CRUISE_BTN_AUX_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ CRUISE_BTN_AUX_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ CRUISE_BTN_AUX_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BRAKE_PEDAL_I4_COMPAT_PT_CAN : 40|12@1+ (-1,3328) [0|3328] "" BMW_I3
+CM_ BO_ 239 "Experimental PT-CAN candidate from parked command-isolation routes. The first 16 bits changed distinctly across SET, RES, and distance-button presses. Cross-check against smnogar BMW i4 SP2018 DBC showed that bits 40|12 stay pinned near 3328 on current i3 brake routes, so this frame should remain a cruise-button support frame on CAN src 2, not the primary brake signal.";
+
+BO_ 274 PTCAN_BLINKER_SEATBELT_CANDIDATE: 8 BMW_I3
+ SG_ BLINKER_SEATBELT_WORD0_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BLINKER_SEATBELT_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BLINKER_SEATBELT_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BLINKER_SEATBELT_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BLINKER_SEATBELT_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
+ CM_ BO_ 274 "Experimental PT-CAN candidate from parked blinker-only and seatbelt-only routes. Byte 6 is the strongest discriminator across idle, right indicator, left indicator, and seatbelt transitions, while bytes 0 and 2 also shift with state. Treat as the current top candidate for turn-signal state and the best available CAN-side seatbelt candidate on src 2.";
+
+BO_ 415 PTCAN_CRUISE_BUTTONS_MAIN: 8 BMW_I3
+ SG_ CRUISE_BTN_MAIN_PT_CAN : 16|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ CRUISE_BTN_MAIN_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ CRUISE_BTN_MAIN_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
+ CM_ BO_ 415 "Experimental PT-CAN candidate from parked command-isolation routes. Bytes 2-3 changed cleanly across SET, RES, and distance-button presses with stable idle values, making this the primary cruise-button candidate on CAN src 2.";
+
+BO_ 796 PTCAN_BRAKE_PRESSED_CANDIDATE: 8 BMW_I3
+ SG_ BRAKE_PRESSED_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BRAKE_PRESSED_BYTE_0_PT_CAN : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BRAKE_PRESSED_BYTE_1_PT_CAN : 8|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 796 "Experimental PT-CAN brake candidate from parked brake-isolation route. Byte 1 separates idle (~0x20..0x2E) from brake application (~0x00..0x0E), making it the strongest current brakePressed candidate on CAN src 2.";

@@ -1,3 +1,5 @@
+from collections import Counter, deque
+
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import CarStateBase
@@ -22,6 +24,8 @@ class CarState(CarStateBase):
     self.old_acc_button = False
     self.old_tja_button = False
     self.old_speed_adjust = False
+    self.drive_state_kind_hist = deque(maxlen=3)
+    self.drive_state_gear_est = GearShifter.unknown
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -53,16 +57,24 @@ class CarState(CarStateBase):
     brake_can_byte1 = int(cp.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
     ret.brakePressed = brake_can_byte1 < 0x10
 
-    gear_raw = int(cp.vl.get("DRIVE_STATE_EXPERIMENTAL", {}).get("DRIVE_STATE_RAW", 0))
-    ret.gearShifter = {
-      0: GearShifter.unknown,
-      1: GearShifter.park,
-      2: GearShifter.reverse,
-      3: GearShifter.neutral,
-      4: GearShifter.drive,
-      5: GearShifter.sport,
-      6: GearShifter.low,
-    }.get(gear_raw, GearShifter.unknown)
+    drive_state = cp.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
+    drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
+    drive_kind_b11 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_11", 0))
+    if drive_cycle == 3 and drive_kind_b11 in (0x22, 0x24, 0x25):
+      self.drive_state_kind_hist.append(drive_kind_b11)
+    if self.drive_state_kind_hist:
+      # FlexRay addr 40 is multiplexed. The cycle==3 subframe carries the
+      # cleanest park/drive/reverse discriminator in byte 11:
+      #   0x22 -> P, 0x24 -> D, 0x25 -> R.
+      # A very short majority window suppresses the subframe churn without
+      # smearing long state transitions.
+      drive_kind = Counter(self.drive_state_kind_hist).most_common(1)[0][0]
+      self.drive_state_gear_est = {
+        0x22: GearShifter.park,
+        0x24: GearShifter.drive,
+        0x25: GearShifter.reverse,
+      }.get(drive_kind, self.drive_state_gear_est)
+    ret.gearShifter = self.drive_state_gear_est
 
     old_ctrl_state = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
     old_ctrl_gate = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))

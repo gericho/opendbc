@@ -25,6 +25,7 @@ class CarState(CarStateBase):
     self.old_acc_button = False
     self.old_tja_button = False
     self.old_speed_adjust = False
+    self.legacy_main_button = 0
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
     self.main_cruise_button = 0
@@ -127,6 +128,7 @@ class CarState(CarStateBase):
     ret.espDisabled = False
 
     prev_main_cruise_button = self.main_cruise_button
+    prev_legacy_main_button = self.legacy_main_button
     # Broad button-route scans show only two 415-word values with enough purity to
     # be worth mapping today:
     #   0x8015 -> SET family
@@ -136,10 +138,25 @@ class CarState(CarStateBase):
       0x8015: 1,
       0x8016: 2,
     }.get(main_cruise_word, 0)
-    ret.buttonEvents = create_button_events(self.main_cruise_button, prev_main_cruise_button, {
-      1: ButtonType.setCruise,
-      2: ButtonType.resumeCruise,
-    })
+    # Latest isolated ACC/TJA route shows a much cleaner split on FlexRay 97:
+    #   30716 / 65282 -> ACC main button family
+    #   18684 / 65283 -> TJA / lane-assist main button family
+    self.legacy_main_button = 0
+    if self.old_acc_button:
+      self.legacy_main_button = 1
+    elif self.old_tja_button:
+      self.legacy_main_button = 2
+
+    ret.buttonEvents = [
+      *create_button_events(self.main_cruise_button, prev_main_cruise_button, {
+        1: ButtonType.setCruise,
+        2: ButtonType.resumeCruise,
+      }),
+      *create_button_events(self.legacy_main_button, prev_legacy_main_button, {
+        1: ButtonType.mainCruise,
+        2: ButtonType.lkas,
+      }),
+    ]
     return ret, ret_sp
 
   @staticmethod

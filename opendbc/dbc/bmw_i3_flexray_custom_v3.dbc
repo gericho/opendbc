@@ -77,11 +77,19 @@ BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
  SG_ BRAKE_BLEND_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_BLEND_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_BLEND_STATE_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BRAKE_BLEND_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BRAKE_BLEND_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BRAKE_BLEND_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BRAKE_BLEND_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ SG_ 54 BRAKE_BLEND_STATE_A "Primary brake-blend / regen-support candidate. Across 00000054, 00000055, and modern ACC-only route 000000b3, this frame cleanly separates manual accelerator application, ACC-base, and managed/following phases. STATE_B and STATE_C rise strongly in managed-following and automatic decel windows, making this the best current stock longitudinal support frame for brake-blend / regen behavior.";
 
 BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
  SG_ PEDAL_HOLD_STATE_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ PEDAL_HOLD_STATE_AUX : 32|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ PEDAL_HOLD_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ PEDAL_HOLD_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ PEDAL_HOLD_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ PEDAL_HOLD_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Strongest stock longitudinal content candidate so far. Across 00000054, 00000055, and 000000b3, RAW is high during clear manual accelerator application, lower in ACC-base, and lowest during managed/following windows. AUX also shifts strongly between manual and managed phases. This is the best current candidate for stock pedal/hold/coast-state inference under ACC.";
 
 BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3

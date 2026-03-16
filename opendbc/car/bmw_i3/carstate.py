@@ -1,13 +1,14 @@
 from collections import Counter, deque
 
 from opendbc.can import CANDefine, CANParser
-from opendbc.car import Bus, structs
+from opendbc.car import Bus, structs, create_button_events
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.bmw_i3.values import DBC
 from opendbc.car.common.conversions import Conversions as CV
 
 GearShifter = structs.CarState.GearShifter
 WheelSpeeds = structs.CarState.WheelSpeeds
+ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
@@ -26,6 +27,7 @@ class CarState(CarStateBase):
     self.old_speed_adjust = False
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
+    self.main_cruise_button = 0
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -108,6 +110,7 @@ class CarState(CarStateBase):
 
     blinker_byte6 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
     blinker_byte7 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
+    main_cruise_word = int(cp.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
     driver_door_state = int(cp.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
     # Latest isolated parked routes show the clearest side split here:
     #   0x45 -> right indicator family
@@ -123,7 +126,20 @@ class CarState(CarStateBase):
     ret.stockFcw = False
     ret.espDisabled = False
 
-    ret.buttonEvents = []
+    prev_main_cruise_button = self.main_cruise_button
+    # Broad button-route scans show only two 415-word values with enough purity to
+    # be worth mapping today:
+    #   0x8015 -> SET family
+    #   0x8016 -> RES family
+    # The rest (+/-/distance) still overlap too much for a safe public mapping.
+    self.main_cruise_button = {
+      0x8015: 1,
+      0x8016: 2,
+    }.get(main_cruise_word, 0)
+    ret.buttonEvents = create_button_events(self.main_cruise_button, prev_main_cruise_button, {
+      1: ButtonType.setCruise,
+      2: ButtonType.resumeCruise,
+    })
     return ret, ret_sp
 
   @staticmethod

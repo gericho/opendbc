@@ -14,6 +14,8 @@ class CarState(CarStateBase):
     self.old_acc_ctrl_state = 0
     self.old_acc_ctrl_gate = 0
     self.old_tja_active = False
+    self.old_acc_base_active = False
+    self.old_assist_advanced = False
     self.old_stalk_main_a = 0
     self.old_stalk_main_b = 0
     self.old_acc_button = False
@@ -64,7 +66,9 @@ class CarState(CarStateBase):
     old_stalk_main_b = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
     self.old_acc_ctrl_state = old_ctrl_state
     self.old_acc_ctrl_gate = old_ctrl_gate
-    self.old_tja_active = old_ctrl_state == 24802
+    self.old_acc_base_active = old_ctrl_state == 16610
+    self.old_assist_advanced = old_ctrl_state == 24802
+    self.old_tja_active = self.old_assist_advanced
     self.old_stalk_main_a = old_stalk_main_a
     self.old_stalk_main_b = old_stalk_main_b
     # Legacy route correlation:
@@ -75,8 +79,10 @@ class CarState(CarStateBase):
     self.old_tja_button = old_stalk_main_a == 18684 and old_stalk_main_b == 65283
     self.old_speed_adjust = old_stalk_main_a == 5884 and old_stalk_main_b == 65282
 
-    # Legacy FlexRay TJA/ACC routes show the clearest stable states here:
-    # 35041/643 -> off baseline, 16610/3584 -> ACC active, 24802/3584 -> TJA active.
+    # Old and modern ACC-only/TJA routes show the clearest stable states here:
+    # 35041/643 -> off baseline
+    # 16610/3584 -> ACC active base state
+    # 24802/(640 or 656) -> advanced assist state / TJA-requested-or-gated branch
     acc_enabled = old_ctrl_state in (16610, 24802)
     acc_available = acc_enabled or old_ctrl_gate in (640, 656, 3584)
 

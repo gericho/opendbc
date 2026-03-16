@@ -2,6 +2,7 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.bmw_i3.values import DBC
+from opendbc.car.common.conversions import Conversions as CV
 
 GearShifter = structs.CarState.GearShifter
 WheelSpeeds = structs.CarState.WheelSpeeds
@@ -44,7 +45,10 @@ class CarState(CarStateBase):
 
     ret.yawRate = float(cp.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
     ret.brake = float(cp.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
-    ret.gasPressed = False
+
+    gas_raw = int(cp.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
+    ret.gas = min(max(gas_raw / 4000.0, 0.0), 1.0)
+    ret.gasPressed = gas_raw > 200
 
     brake_can_byte1 = int(cp.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
     ret.brakePressed = brake_can_byte1 < 0x10

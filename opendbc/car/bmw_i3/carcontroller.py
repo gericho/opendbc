@@ -20,6 +20,7 @@ class CarController(CarControllerBase):
     self.shadow_cnt = 0
     self.last_shadow_acc_values = None
     self.last_shadow_acc_bytes = b""
+    self.last_shadow_long_debug = None
 
   def _next_shadow_cnt(self) -> int:
     self.shadow_cnt = (self.shadow_cnt + 1) % 16
@@ -74,6 +75,36 @@ class CarController(CarControllerBase):
             "crc1": values["crc1"],
             "payload": self.last_shadow_acc_bytes.hex(),
           })
+
+    desired_accel = float(actuators.accel)
+    self.last_shadow_long_debug = {
+      "desired_accel": desired_accel,
+      "long_active": bool(CC.longActive),
+      "gate": int(getattr(CS, "old_acc_ctrl_gate", 0)),
+      "state": int(getattr(CS, "old_acc_ctrl_state", 0)),
+      "acc_base_active": bool(getattr(CS, "old_acc_base_active", False)),
+      "assist_advanced": bool(getattr(CS, "old_assist_advanced", False)),
+      "tja_active": bool(getattr(CS, "old_tja_active", False)),
+      "v_ego": float(CS.out.vEgoRaw),
+      "gas_pressed": bool(CS.out.gasPressed),
+      "brake_pressed": bool(CS.out.brakePressed),
+      "standstill": bool(CS.out.standstill),
+      # 59 = best current stock powertrain-intent proxy
+      "long_59_wb": int(getattr(CS, "long_59_wb", 0)),
+      "long_59_wc": int(getattr(CS, "long_59_wc", 0)),
+      "long_59_b3": int(getattr(CS, "long_59_b3", 0)),
+      "long_59_b5": int(getattr(CS, "long_59_b5", 0)),
+      # 54 = best current stock brake-blend / regen proxy
+      "long_54_wb": int(getattr(CS, "long_54_wb", 0)),
+      "long_54_wc": int(getattr(CS, "long_54_wc", 0)),
+      "long_54_b4": int(getattr(CS, "long_54_b4", 0)),
+      "long_54_b6": int(getattr(CS, "long_54_b6", 0)),
+    }
+    if self.frame % 50 == 0:
+      carlog.warning({
+        "event": "bmw_i3_shadow_long",
+        **self.last_shadow_long_debug,
+      })
 
     self.frame += 1
     # Read-only shadow mode: build the logical frame shape, but do not send.

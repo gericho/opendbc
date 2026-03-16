@@ -29,6 +29,14 @@ class CarState(CarStateBase):
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
     self.main_cruise_button = 0
+    self.long_59_wb = 0
+    self.long_59_wc = 0
+    self.long_59_b3 = 0
+    self.long_59_b5 = 0
+    self.long_54_wb = 0
+    self.long_54_wc = 0
+    self.long_54_b4 = 0
+    self.long_54_b6 = 0
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -60,6 +68,21 @@ class CarState(CarStateBase):
 
     ret.yawRate = float(cp_flexray.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
     ret.brake = float(cp_can.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
+
+    # Best current stock longitudinal helper branches:
+    #   59 -> powertrain-intent proxy
+    #   54 -> brake-blend / regen-support proxy
+    long_59 = cp_flexray.vl.get("LONG_TX_POWERTRAIN_CANDIDATE", {})
+    self.long_59_wb = int(long_59.get("LONG_TX_POWERTRAIN_WORD_B", 0))
+    self.long_59_wc = int(long_59.get("LONG_TX_POWERTRAIN_WORD_C", 0))
+    self.long_59_b3 = int(long_59.get("LONG_TX_POWERTRAIN_BYTE_3", 0))
+    self.long_59_b5 = int(long_59.get("LONG_TX_POWERTRAIN_BYTE_5", 0))
+
+    long_54 = cp_flexray.vl.get("LONG_TX_BRAKE_BLEND_CANDIDATE", {})
+    self.long_54_wb = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_B", 0))
+    self.long_54_wc = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_C", 0))
+    self.long_54_b4 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_4", 0))
+    self.long_54_b6 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_6", 0))
 
     gas_raw = int(cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
     ret.gasPressed = gas_raw > 200

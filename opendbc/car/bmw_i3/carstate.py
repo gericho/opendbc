@@ -31,35 +31,43 @@ class CarState(CarStateBase):
     self.main_cruise_button = 0
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
-    cp = can_parsers[Bus.pt]
+    cp_state = can_parsers[Bus.pt]
+    cp_flexray = can_parsers[Bus.cam]
+    cp_can = can_parsers[Bus.party]
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
 
-    ws = cp.vl.get("WHEEL_SPEED", {})
+    ws = cp_flexray.vl.get("WHEEL_SPEED", {})
     ret.wheelSpeeds = WheelSpeeds(fl=float(ws.get("FL_SPEED_RAW", 0.0)) / 3.6,
                                   fr=float(ws.get("FR_SPEED_RAW", 0.0)) / 3.6,
                                   rl=float(ws.get("RL_SPEED_RAW", 0.0)) / 3.6,
                                   rr=float(ws.get("RR_SPEED_RAW", 0.0)) / 3.6)
 
     wheel_speeds = [ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr]
-    ret.vEgoRaw = float(sum(wheel_speeds) / 4.0)
+    wheel_speed_avg = float(sum(wheel_speeds) / 4.0)
+    # Match the dynm/SP2018 BMW method semantically: prefer vehicle speed from
+    # frame 55 as the primary fused vehicle-speed source, and use wheel speeds
+    # only as fallback / sanity support.
+    vehicle_speed_kph = float(cp_flexray.vl.get("VEHICLE_SPEED_PROV", {}).get("VEHICLE_SPEED_RAW_A", 0.0))
+    ret.vEgoRaw = vehicle_speed_kph * CV.KPH_TO_MS if vehicle_speed_kph > 0.0 else wheel_speed_avg
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    ret.vEgoCluster = ret.vEgoRaw
     ret.standstill = ret.vEgoRaw < 0.1
 
-    ret.steeringAngleDeg = float(cp.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
-    ret.steeringTorque = float(cp.vl.get("STEER_TORQUE", {}).get("DRIVER_STEER_TORQUE_RAW", 0.0))
+    ret.steeringAngleDeg = float(cp_flexray.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
+    ret.steeringTorque = float(cp_flexray.vl.get("STEER_TORQUE", {}).get("DRIVER_STEER_TORQUE_RAW", 0.0))
     ret.steeringPressed = abs(ret.steeringTorque) > 1.0
 
-    ret.yawRate = float(cp.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
-    ret.brake = float(cp.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
+    ret.yawRate = float(cp_flexray.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
+    ret.brake = float(cp_can.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
 
-    gas_raw = int(cp.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
+    gas_raw = int(cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
     ret.gasPressed = gas_raw > 200
 
-    brake_can_byte1 = int(cp.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
+    brake_can_byte1 = int(cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
     ret.brakePressed = brake_can_byte1 < 0x10
 
-    drive_state = cp.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
+    drive_state = cp_flexray.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
     drive_kind_b11 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_11", 0))
     drive_kind_b14 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_14", 0))
@@ -90,10 +98,10 @@ class CarState(CarStateBase):
       self.drive_state_gear_est = Counter(self.drive_state_kind_hist).most_common(1)[0][0]
     ret.gearShifter = self.drive_state_gear_est
 
-    old_ctrl_state = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
-    old_ctrl_gate = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))
-    old_stalk_main_a = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
-    old_stalk_main_b = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
+    old_ctrl_state = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
+    old_ctrl_gate = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))
+    old_stalk_main_a = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
+    old_stalk_main_b = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
     self.old_acc_ctrl_state = old_ctrl_state
     self.old_acc_ctrl_gate = old_ctrl_gate
     self.old_acc_base_active = old_ctrl_state == 16610
@@ -120,10 +128,10 @@ class CarState(CarStateBase):
     ret.cruiseState.enabled = acc_enabled
     ret.cruiseState.standstill = ret.standstill
 
-    blinker_byte6 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
-    blinker_byte7 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
-    main_cruise_word = int(cp.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
-    driver_door_state = int(cp.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
+    blinker_byte6 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
+    blinker_byte7 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
+    main_cruise_word = int(cp_can.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
+    driver_door_state = int(cp_can.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
     # Latest isolated parked routes show the clearest side split here:
     #   0x45 -> right indicator family
     #   0x25 -> left indicator family
@@ -177,4 +185,9 @@ class CarState(CarStateBase):
     # makes `canValid` flap and surfaces as the generic "Unknown Vehicle Variant"
     # alert even when the fingerprint is correct. Parse the bus without required
     # alive checks and let individual signals fall back to defaults when absent.
-    return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0)}
+    dbc = DBC[CP.carFingerprint][Bus.pt]
+    return {
+      Bus.pt: CANParser(dbc, [], 0),
+      Bus.cam: CANParser(dbc, [], 1),
+      Bus.party: CANParser(dbc, [], 2),
+    }

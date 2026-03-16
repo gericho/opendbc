@@ -59,8 +59,12 @@ BO_ 56 DYNAMICS_YAW_PROV: 17 BMW_I3
  SG_ YAW_RATE_RAW_B : 24|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
 
 BO_ 40 DRIVE_STATE_EXPERIMENTAL: 17 BMW_I3
+ SG_ DRIVE_STATE_CYCLE_COMPAT : 0|2@1+ (1,0) [0|3] "" BMW_I3
  SG_ DRIVE_STATE_RAW : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ DRIVE_MODE_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
+  SG_ DRIVE_MODE_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ DRIVE_STATE_GEAR_M3_COMPAT : 24|4@1+ (1,0) [0|15] "" BMW_I3
+ SG_ DRIVE_STATE_P_LOCKED_M3_COMPAT : 49|1@1+ (1,0) [0|1] "" BMW_I3
+ CM_ BO_ 40 "Experimental drive-state frame. Cross-check against dynm BMW SP2018 FlexRay DBC shows this frame is the closest local match to their maybe_gear_switch frame, so helper signals for cycle_count, GEAR m3, and P_locked m3 are exposed here for analysis. Current i3 parked routes do not yet separate P/D/N/R robustly enough to use these helpers directly in CarState.";
 
 BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
  SG_ BRAKE_REGEN_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3

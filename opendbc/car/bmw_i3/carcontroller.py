@@ -48,8 +48,8 @@ class CarController(CarControllerBase):
                                                   True, CarControllerParams, self.VM)
       self.apply_angle_last = desired_angle
 
-      if self.frame % 2 == 0:
-        cycle_count = self._next_shadow_cycle()
+      cycle_count = self._next_shadow_cycle()
+      if cycle_count % 4 == 1:
         cnt1 = self._next_shadow_cnt()
         lat_triggered = 1 if abs(desired_angle - CS.out.steeringAngleDeg) > 0.5 else 0
         values = {

@@ -39,6 +39,19 @@ class CarController(CarControllerBase):
       crc = CRC8J1850[crc]
     return crc
 
+  def _shadow_steer_torque_req(self, desired_angle: float, current_angle: float) -> float:
+    # Shadow-only heuristic: BMW logs show steer_torque_req as a real field, but
+    # we do not have a closed i3-specific mapping yet. Use a conservative
+    # proportional term on angle error only for method debugging.
+    angle_error = desired_angle - current_angle
+    return float(max(-3.0, min(3.0, angle_error * 0.12)))
+
+  def _shadow_torque_reserve(self, driver_torque: float) -> int:
+    # Local BMW analysis suggests this reserve drops as driver torque magnitude
+    # rises. Keep a narrow, conservative range around the dynm default 0xA0.
+    reserve = 0xA0 - int(min(0x30, abs(driver_torque) * 4.0))
+    return max(0x70, min(0xA0, reserve))
+
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
 
@@ -52,20 +65,22 @@ class CarController(CarControllerBase):
       if cycle_count % 4 == 1:
         cnt1 = self._next_shadow_cnt()
         lat_triggered = 1 if abs(desired_angle - CS.out.steeringAngleDeg) > 0.5 else 0
+        steer_torque_req = self._shadow_steer_torque_req(desired_angle, CS.out.steeringAngleDeg)
+        torque_reserve = self._shadow_torque_reserve(CS.out.steeringTorque)
         values = {
           "cycle_count": cycle_count,
           "crc1": 0,
           "cnt1": cnt1,
           "always_0x9": 9,
           "steering_angle_req": desired_angle,
-          "steer_torque_req": 0.0,
+          "steer_torque_req": steer_torque_req,
           "TJA_ready": 0,
           # Match the dynm/smnogar/BMW SP2018 method defaults unless route
           # evidence proves otherwise.
           "assist_mode": 0,
           "wayback_en1_lane_keeping_trigger": lat_triggered,
           "lane_keeping_triggered": lat_triggered,
-          "like_assist_torque_reserve": 0xA0,
+          "like_assist_torque_reserve": torque_reserve,
           "constants": 0x03ff17fe,
           "wayback_en_2": lat_triggered,
           "steering_engaged": 2,
@@ -87,6 +102,8 @@ class CarController(CarControllerBase):
             "crc1": values["crc1"],
             "assist_mode": values["assist_mode"],
             "lat_triggered": lat_triggered,
+            "steer_torque_req": round(steer_torque_req, 3),
+            "torque_reserve": torque_reserve,
             "payload": self.last_shadow_acc_bytes.hex(),
           })
 

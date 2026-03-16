@@ -54,7 +54,6 @@ class CarState(CarStateBase):
     ret.brake = float(cp.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
 
     gas_raw = int(cp.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
-    ret.gas = min(max(gas_raw / 4000.0, 0.0), 1.0)
     ret.gasPressed = gas_raw > 200
 
     brake_can_byte1 = int(cp.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))

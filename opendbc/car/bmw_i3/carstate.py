@@ -11,6 +11,14 @@ class CarState(CarStateBase):
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     super().__init__(CP, CP_SP)
     self.shifter_values = CANDefine(DBC[CP.carFingerprint][Bus.pt]).dv.get("DRIVE_STATE_EXPERIMENTAL", {})
+    self.old_acc_ctrl_state = 0
+    self.old_acc_ctrl_gate = 0
+    self.old_tja_active = False
+    self.old_stalk_main_a = 0
+    self.old_stalk_main_b = 0
+    self.old_acc_button = False
+    self.old_tja_button = False
+    self.old_speed_adjust = False
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -50,8 +58,30 @@ class CarState(CarStateBase):
       6: GearShifter.low,
     }.get(gear_raw, GearShifter.unknown)
 
-    ret.cruiseState.available = False
-    ret.cruiseState.enabled = False
+    old_ctrl_state = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
+    old_ctrl_gate = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))
+    old_stalk_main_a = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
+    old_stalk_main_b = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
+    self.old_acc_ctrl_state = old_ctrl_state
+    self.old_acc_ctrl_gate = old_ctrl_gate
+    self.old_tja_active = old_ctrl_state == 24802
+    self.old_stalk_main_a = old_stalk_main_a
+    self.old_stalk_main_b = old_stalk_main_b
+    # Legacy route correlation:
+    # 30716/65282 -> ACC button family
+    # 18684/65283 -> TJA button family
+    # 5884/65282  -> speed stalk +/- family
+    self.old_acc_button = old_stalk_main_a == 30716 and old_stalk_main_b == 65282
+    self.old_tja_button = old_stalk_main_a == 18684 and old_stalk_main_b == 65283
+    self.old_speed_adjust = old_stalk_main_a == 5884 and old_stalk_main_b == 65282
+
+    # Legacy FlexRay TJA/ACC routes show the clearest stable states here:
+    # 35041/643 -> off baseline, 16610/3584 -> ACC active, 24802/3584 -> TJA active.
+    acc_enabled = old_ctrl_state in (16610, 24802)
+    acc_available = acc_enabled or old_ctrl_gate in (640, 656, 3584)
+
+    ret.cruiseState.available = acc_available
+    ret.cruiseState.enabled = acc_enabled
     ret.cruiseState.standstill = ret.standstill
 
     ret.leftBlinker = False
@@ -76,6 +106,19 @@ class CarState(CarStateBase):
       ("DRIVE_STATE_EXPERIMENTAL", 50),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", 50),
       ("BRAKE_BLEND_CANDIDATE_B", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_A", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_B", 50),
+      ("COLUMN_SWITCH_CANDIDATE", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_C", 50),
+      ("ACC_STALK_TJA_CANDIDATE_B", 50),
+      ("ACC_STALK_TJA_CANDIDATE_C", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_D", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_E", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_F", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_G", 50),
+      ("ACC_STALK_TJA_CANDIDATE_F", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_H", 50),
+      ("ACC_TJA_OLD_ROUTE_HELPER_I", 50),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", 50),
     ]
     return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], messages, 0)}

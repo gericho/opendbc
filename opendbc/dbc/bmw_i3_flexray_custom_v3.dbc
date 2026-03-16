@@ -87,12 +87,39 @@ BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ SG_ 43 CHASSIS_STATE_A "Experimental. Changes with dynamic state, but weaker than address 59 for brake-related hypotheses.";
 
+BO_ 93 ACC_TJA_OLD_ROUTE_HELPER_A: 17 BMW_I3
+ SG_ ACC_TJA_OLD_A_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_A_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_A_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_A_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_A_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_STATE_MAIN_A : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 93 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src23 frame repeatedly changed around ACC/TJA/stalk command windows and is kept as a raw helper only for old-route correlation.";
+
+BO_ 97 ACC_TJA_OLD_ROUTE_HELPER_B: 17 BMW_I3
+ SG_ ACC_TJA_OLD_B_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_B_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_B_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_B_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_B_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_STALK_MAIN_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_STALK_MAIN_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 97 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src23 frame is one of the strongest recurring candidates for ACC/TJA/stalk command state and is exposed raw for old-route analysis.";
+
 BO_ 102 COLUMN_SWITCH_CANDIDATE: 17 BMW_I3
  SG_ COLUMN_SWITCH_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ COLUMN_SWITCH_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ COLUMN_SWITCH_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ COLUMN_SWITCH_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ BO_ 102 "Experimental column-switch / indicator candidate. In the parked command-isolation route, this frame changed clearly during right/left indicator windows and also moved with some ACC/TJA button presses. Treat as a likely steering-column input frame rather than pure ADAS state.";
+
+BO_ 110 ACC_TJA_OLD_ROUTE_HELPER_C: 17 BMW_I3
+ SG_ ACC_TJA_OLD_C_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_C_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_C_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_C_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_C_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 110 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src23 frame moved with speed-stalk and ACC transitions often enough to warrant a raw helper block.";
 
 BO_ 106 ACC_STALK_TJA_CANDIDATE_A: 17 BMW_I3
  SG_ ACC_STALK_TJA_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -122,11 +149,61 @@ BO_ 124 ACC_STALK_TJA_CANDIDATE_D: 17 BMW_I3
  SG_ ACC_STALK_TJA_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ BO_ 124 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Strongly correlated with SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, and ACC off. This frame is a priority candidate for future bit-level extraction of ACC/TJA state.";
 
+BO_ 131 ACC_TJA_OLD_ROUTE_HELPER_D: 17 BMW_I3
+ SG_ ACC_TJA_OLD_D_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_D_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_CTRL_GATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 131 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src13 frame is useful around manual override and roundabout transitions, but still too raw for semantic naming.";
+
+BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
+ SG_ ACC_TJA_OLD_E_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_E_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_E_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_E_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_E_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_CTRL_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 135 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src13 frame is one of the strongest recurring ACC/TJA command-state candidates across parked and on-road sessions.";
+
+BO_ 241 ACC_TJA_OLD_ROUTE_HELPER_F: 17 BMW_I3
+ SG_ ACC_TJA_OLD_F_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_F_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_F_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_F_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_F_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 241 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. Secondary command-related frame retained as raw helper for ACC/TJA comparison work.";
+
+BO_ 250 ACC_TJA_OLD_ROUTE_HELPER_G: 17 BMW_I3
+ SG_ ACC_TJA_OLD_G_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_G_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_G_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_G_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_G_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 250 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. Strong secondary responder during SET/RES/ACC/TJA/speed-stalk windows; kept raw for old-route correlation.";
+
 BO_ 256 ACC_STALK_TJA_CANDIDATE_E: 17 BMW_I3
  SG_ ACC_STALK_TJA_E_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_E_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_E_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ BO_ 256 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Small payload frame that changed consistently at SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, blinker windows, and ACC off. Good candidate for compact command-state or resume-state signaling.";
+
+BO_ 269 ACC_TJA_OLD_ROUTE_HELPER_H: 17 BMW_I3
+ SG_ ACC_TJA_OLD_H_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_H_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_H_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_H_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_H_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 269 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. Src13 frame that reacts strongly near ACC/TJA engagement and manual intervention windows.";
+
+BO_ 271 ACC_TJA_OLD_ROUTE_HELPER_I: 17 BMW_I3
+ SG_ ACC_TJA_OLD_I_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACC_TJA_OLD_I_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_I_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_I_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACC_TJA_OLD_I_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 271 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. Src13 frame that follows the same command-family transitions as 135/97/116/112/275, but with weaker consistency.";
 
 BO_ 275 ACC_STALK_TJA_CANDIDATE_F: 17 BMW_I3
  SG_ ACC_STALK_TJA_F_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3

@@ -172,30 +172,9 @@ class CarState(CarStateBase):
 
   @staticmethod
   def get_can_parsers(CP, CP_SP):
-    messages = [
-      ("WHEEL_SPEED", 100),
-      ("STEER_TORQUE", 100),
-      ("EPS_ANGLE", 100),
-      ("VEHICLE_SPEED_PROV", 100),
-      ("DYNAMICS_YAW_PROV", 100),
-      ("DRIVE_STATE_EXPERIMENTAL", 50),
-      ("PEDAL_OR_HOLD_STATE_CANDIDATE", 50),
-      ("BRAKE_BLEND_CANDIDATE_B", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_A", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_B", 50),
-      ("COLUMN_SWITCH_CANDIDATE", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_C", 50),
-      ("ACC_STALK_TJA_CANDIDATE_B", 50),
-      ("ACC_STALK_TJA_CANDIDATE_C", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_D", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_E", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_F", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_G", 50),
-      ("ACC_STALK_TJA_CANDIDATE_F", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_H", 50),
-      ("ACC_TJA_OLD_ROUTE_HELPER_I", 50),
-      ("PTCAN_BLINKER_STATE_CANDIDATE", 50),
-      ("PTCAN_DRIVER_DOOR_CANDIDATE", 50),
-      ("PTCAN_BRAKE_PRESSED_CANDIDATE", 50),
-    ]
-    return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], messages, 0)}
+    # Many BMW i3 helper frames on this custom FlexRay/CAN gateway are optional,
+    # route-dependent, or phase-dependent. Requiring them for parser liveness
+    # makes `canValid` flap and surfaces as the generic "Unknown Vehicle Variant"
+    # alert even when the fingerprint is correct. Parse the bus without required
+    # alive checks and let individual signals fall back to defaults when absent.
+    return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0)}

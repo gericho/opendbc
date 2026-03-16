@@ -108,6 +108,7 @@ class CarState(CarStateBase):
 
     blinker_byte6 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
     blinker_byte7 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
+    driver_door_state = int(cp.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
     # Latest isolated parked routes show the clearest side split here:
     #   0x45 -> right indicator family
     #   0x25 -> left indicator family
@@ -117,7 +118,7 @@ class CarState(CarStateBase):
     #   0xA5 -> buckled
     #   0xB5 -> unbuckled
     ret.seatbeltUnlatched = blinker_byte7 == 0xB5
-    ret.doorOpen = False
+    ret.doorOpen = driver_door_state == 1
     ret.stockAeb = False
     ret.stockFcw = False
     ret.espDisabled = False
@@ -150,6 +151,7 @@ class CarState(CarStateBase):
       ("ACC_TJA_OLD_ROUTE_HELPER_H", 50),
       ("ACC_TJA_OLD_ROUTE_HELPER_I", 50),
       ("PTCAN_BLINKER_STATE_CANDIDATE", 50),
+      ("PTCAN_DRIVER_DOOR_CANDIDATE", 50),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", 50),
     ]
     return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], messages, 0)}

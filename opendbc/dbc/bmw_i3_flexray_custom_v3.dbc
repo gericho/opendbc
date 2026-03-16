@@ -237,6 +237,10 @@ BO_ 274 PTCAN_BLINKER_STATE_CANDIDATE: 8 BMW_I3
  SG_ BLINKER_STATE_BYTE_7 : 56|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ BO_ 274 "Experimental PT-CAN state candidate. Byte 6 is the strongest current discriminator for left/right indicator state on src 2. Byte 7 also separates the current seatbelt attached/unattached parked-route candidate on the same frame.";
 
+BO_ 481 PTCAN_DRIVER_DOOR_CANDIDATE: 6 BMW_I3
+ SG_ DRIVER_DOOR_STATE_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ CM_ BO_ 481 "Experimental PT-CAN driver-door candidate. Latest isolated parked door route and the previous two-open-close route both show byte 2 toggling cleanly between 0 (closed) and 1 (open) on src 2.";
+
 BO_ 415 PTCAN_CRUISE_BUTTONS_MAIN: 8 BMW_I3
  SG_ CRUISE_BTN_MAIN_PT_CAN : 16|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ CRUISE_BTN_MAIN_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3

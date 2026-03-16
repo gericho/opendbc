@@ -158,7 +158,8 @@ BO_ 131 ACC_TJA_OLD_ROUTE_HELPER_D: 17 BMW_I3
  SG_ ACC_TJA_OLD_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_GATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 131 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src13 frame is useful around manual override and roundabout transitions, but still too raw for semantic naming.";
+ SG_ ACC_LONG_GATE_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 131 "Primary stock longitudinal gate helper. Across legacy TJA routes 00000054/55/56 and modern ACC-only route 000000b3, this frame separates OFF (643), ACC base active (3584), and managed/following assist states (640/656). Best current gate/state coarse indicator for stock ACC behavior.";
 
 BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -167,7 +168,8 @@ BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_E_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 135 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src13 frame is one of the strongest recurring ACC/TJA command-state candidates across parked and on-road sessions.";
+ SG_ ACC_LONG_MAIN_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 135 "Primary stock longitudinal state helper. Across legacy TJA routes 00000054/55/56 and modern ACC-only route 000000b3, this frame separates OFF (35041), ACC base active (16610), and managed/following assist state (24802). Best current stock ACC state indicator.";
 
 BO_ 241 ACC_TJA_OLD_ROUTE_HELPER_F: 17 BMW_I3
  SG_ ACC_TJA_OLD_F_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3

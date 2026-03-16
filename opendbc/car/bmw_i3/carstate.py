@@ -63,20 +63,32 @@ class CarState(CarStateBase):
     drive_state = cp.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
     drive_kind_b11 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_11", 0))
-    if drive_cycle == 3 and drive_kind_b11 in (0x22, 0x24, 0x25):
-      self.drive_state_kind_hist.append(drive_kind_b11)
+    drive_kind_b14 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_14", 0))
+    if drive_cycle == 3:
+      drive_key = None
+      if drive_kind_b11 == 0x24:
+        drive_key = GearShifter.drive
+      elif drive_kind_b11 == 0x25:
+        drive_key = GearShifter.reverse
+      elif drive_kind_b11 == 0x22:
+        if drive_kind_b14 == 0xEE:
+          drive_key = GearShifter.park
+        elif drive_kind_b14 == 0xEC:
+          drive_key = GearShifter.neutral
+      if drive_key is not None:
+        self.drive_state_kind_hist.append(drive_key)
     if self.drive_state_kind_hist:
       # FlexRay addr 40 is multiplexed. The cycle==3 subframe carries the
-      # cleanest park/drive/reverse discriminator in byte 11:
-      #   0x22 -> P, 0x24 -> D, 0x25 -> R.
-      # A very short majority window suppresses the subframe churn without
+      # cleanest gear discriminator. Byte 11 splits D/R from the 0x22 branch,
+      # then byte 14 splits the 0x22 branch into:
+      #   0xEE -> P
+      #   0xEC -> N
+      # while:
+      #   0x24 -> D
+      #   0x25 -> R
+      # A very short majority window suppresses subframe churn without
       # smearing long state transitions.
-      drive_kind = Counter(self.drive_state_kind_hist).most_common(1)[0][0]
-      self.drive_state_gear_est = {
-        0x22: GearShifter.park,
-        0x24: GearShifter.drive,
-        0x25: GearShifter.reverse,
-      }.get(drive_kind, self.drive_state_gear_est)
+      self.drive_state_gear_est = Counter(self.drive_state_kind_hist).most_common(1)[0][0]
     ret.gearShifter = self.drive_state_gear_est
 
     old_ctrl_state = int(cp.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))

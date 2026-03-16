@@ -65,6 +65,7 @@ BO_ 40 DRIVE_STATE_EXPERIMENTAL: 17 BMW_I3
  SG_ DRIVE_STATE_GEAR_M3_COMPAT : 24|4@1+ (1,0) [0|15] "" BMW_I3
  SG_ DRIVE_STATE_P_LOCKED_M3_COMPAT : 49|1@1+ (1,0) [0|1] "" BMW_I3
  SG_ DRIVE_STATE_KIND_BYTE_11 : 88|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ DRIVE_STATE_KIND_BYTE_14 : 112|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ BO_ 40 "Experimental drive-state frame. Cross-check against dynm BMW SP2018 FlexRay DBC shows this frame is the closest local match to their maybe_gear_switch frame, so helper signals for cycle_count, GEAR m3, and P_locked m3 are exposed here for analysis. Current i3 parked routes do not yet separate P/D/N/R robustly enough to use these helpers directly in CarState.";
 
 BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3

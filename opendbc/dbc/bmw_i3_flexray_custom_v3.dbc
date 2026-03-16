@@ -71,23 +71,23 @@ BO_ 40 DRIVE_STATE_EXPERIMENTAL: 17 BMW_I3
 BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
  SG_ BRAKE_REGEN_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_REGEN_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental. Address 44 changed between moving and stopped states, but did not cleanly isolate pedal-vs-regen by itself.";
+ CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental secondary longitudinal candidate. Across historical TJA routes 00000054/55 and modern ACC-only route 000000b3, this frame separates dynamic phases weakly but remains far less informative than 54 and 59 for manual pedal vs managed-following behavior.";
 
 BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
  SG_ BRAKE_BLEND_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_BLEND_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_BLEND_STATE_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 54 BRAKE_BLEND_STATE_A "Experimental. Address 54 reacts during coast-to-regen transitions and automatic deceleration windows. In TJA logs, STATE_B/STATE_C changed more clearly during roundabout follow and release-of-accelerator windows than during steady manual pedal application, so this frame is a stronger brake-blend / regen-support candidate than address 44.";
+ CM_ SG_ 54 BRAKE_BLEND_STATE_A "Primary brake-blend / regen-support candidate. Across 00000054, 00000055, and modern ACC-only route 000000b3, this frame cleanly separates manual accelerator application, ACC-base, and managed/following phases. STATE_B and STATE_C rise strongly in managed-following and automatic decel windows, making this the best current stock longitudinal support frame for brake-blend / regen behavior.";
 
 BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
  SG_ PEDAL_HOLD_STATE_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ PEDAL_HOLD_STATE_AUX : 32|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Experimental but strongest pedal / coast / hold candidate from user logs. Across multiple TJA sessions, this field moved from high values during clear manual accelerator application to much lower values during release-to-regen and ACC-managed distance holding windows, making it the current best candidate for pedal-state or hold-state inference.";
+ CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Strongest stock longitudinal content candidate so far. Across 00000054, 00000055, and 000000b3, RAW is high during clear manual accelerator application, lower in ACC-base, and lowest during managed/following windows. AUX also shifts strongly between manual and managed phases. This is the best current candidate for stock pedal/hold/coast-state inference under ACC.";
 
 BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 43 CHASSIS_STATE_A "Experimental. Changes with dynamic state, but weaker than address 59 for brake-related hypotheses.";
+ CM_ SG_ 43 CHASSIS_STATE_A "Experimental secondary dynamic-state frame. It follows longitudinal phase changes across 00000054/55/b3, but is still weaker than 59 and 54 for isolating stock ACC content.";
 
 BO_ 93 ACC_TJA_OLD_ROUTE_HELPER_A: 17 BMW_I3
  SG_ ACC_TJA_OLD_A_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3

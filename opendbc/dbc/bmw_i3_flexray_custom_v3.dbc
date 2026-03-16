@@ -135,14 +135,27 @@ BO_ 112 ACC_STALK_TJA_CANDIDATE_B: 17 BMW_I3
  SG_ ACC_STALK_TJA_B_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_B_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_B_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 112 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. This frame moved with the same event set as 106 and appears on src24, making it a good candidate for ADAS state or command echo on the ECU-side FlexRay group.";
+ SG_ LAT_STOCK_MAIN_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_MAIN_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_MAIN_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_MAIN_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_MAIN_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_ACTIVE_HINT : 45|1@1+ (1,0) [0|1] "" BMW_I3
+ CM_ BO_ 112 "Primary stock lateral/TJA helper confirmed on historical routes 00000054 and 00000055 and present on the modern interface in route 000000b3. Historical logs exposed it on src24; modern dual-FlexRay logging exposes the same frame on src1. It changes cleanly between manual driving, ACC-base, and TJA-assisted steering windows and is the best current candidate for reverse-engineering stock lateral control state/content. Bit-level analysis shows byte5 bit5 is the strongest manual/off vs assisted discriminator: off/manual tends to set the bit (byte5=0x2b), assisted steering tends to clear it (byte5=0x0b).";
 
 BO_ 116 ACC_STALK_TJA_CANDIDATE_C: 17 BMW_I3
  SG_ ACC_STALK_TJA_C_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_C_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_C_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_C_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 116 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Changed with SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, blinker windows, and ACC off. Likely related to driver-assistance command or command echo rather than pure vehicle dynamics.";
+ SG_ LAT_STOCK_SUPPORT_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_SUPPORT_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_SUPPORT_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_SUPPORT_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_SUPPORT_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_SUPPORT_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_SUPPORT_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ CM_ BO_ 116 "Secondary stock lateral/TJA helper confirmed on historical routes 00000054 and 00000055 and present on the modern interface in route 000000b3. Historical logs exposed it on src23; modern dual-FlexRay logging exposes the same frame on src1. It tracks the same assisted-steering phases as 112 and is the best current secondary helper for stock lateral command/echo analysis. Bit-level analysis did not produce a single robust boolean, but bytes 1-2 and byte5 move through stable phase families during assisted steering and are the best fields for future extraction.";
 
 BO_ 124 ACC_STALK_TJA_CANDIDATE_D: 17 BMW_I3
  SG_ ACC_STALK_TJA_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -214,7 +227,11 @@ BO_ 275 ACC_STALK_TJA_CANDIDATE_F: 17 BMW_I3
  SG_ ACC_STALK_TJA_F_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_F_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_STALK_TJA_F_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 275 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Most promising new control-state frame so far: it changed at SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, multiple blinker windows, and ACC off. Treat as top candidate for stalk-command or ADAS command aggregation.";
+ SG_ LAT_STOCK_CONFIRM_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_CONFIRM_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_CONFIRM_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_CONFIRM_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 275 "Stock lateral/TJA confirmation helper confirmed on historical routes 00000054 and 00000055 and present on the modern interface in route 000000b3. Historical logs exposed it on src23; modern dual-FlexRay logging exposes the same frame on src1. It is less clean than 112 and 116 but moves consistently with assisted-steering phases and is useful as a third correlation frame.";
 
 
 BO_ 217 PTCAN_ACCELERATOR_CANDIDATE: 8 BMW_I3

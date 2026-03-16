@@ -106,8 +106,12 @@ class CarState(CarStateBase):
     ret.cruiseState.enabled = acc_enabled
     ret.cruiseState.standstill = ret.standstill
 
-    ret.leftBlinker = False
-    ret.rightBlinker = False
+    blinker_byte6 = int(cp.vl.get("PTCAN_BLINKER_SEATBELT_CANDIDATE", {}).get("BLINKER_SEATBELT_BYTE_6", 0))
+    # Latest isolated parked routes show the clearest side split here:
+    #   0x45 -> right indicator family
+    #   0x25 -> left indicator family
+    ret.rightBlinker = blinker_byte6 == 0x45
+    ret.leftBlinker = blinker_byte6 == 0x25
     ret.seatbeltUnlatched = False
     ret.doorOpen = False
     ret.stockAeb = False
@@ -141,6 +145,7 @@ class CarState(CarStateBase):
       ("ACC_STALK_TJA_CANDIDATE_F", 50),
       ("ACC_TJA_OLD_ROUTE_HELPER_H", 50),
       ("ACC_TJA_OLD_ROUTE_HELPER_I", 50),
+      ("PTCAN_BLINKER_SEATBELT_CANDIDATE", 50),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", 50),
     ]
     return {Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], messages, 0)}

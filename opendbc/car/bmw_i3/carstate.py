@@ -107,12 +107,16 @@ class CarState(CarStateBase):
     ret.cruiseState.standstill = ret.standstill
 
     blinker_byte6 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
+    blinker_byte7 = int(cp.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
     # Latest isolated parked routes show the clearest side split here:
     #   0x45 -> right indicator family
     #   0x25 -> left indicator family
     ret.rightBlinker = blinker_byte6 == 0x45
     ret.leftBlinker = blinker_byte6 == 0x25
-    ret.seatbeltUnlatched = False
+    # Latest isolated parked seatbelt route shows:
+    #   0xA5 -> buckled
+    #   0xB5 -> unbuckled
+    ret.seatbeltUnlatched = blinker_byte7 == 0xB5
     ret.doorOpen = False
     ret.stockAeb = False
     ret.stockFcw = False

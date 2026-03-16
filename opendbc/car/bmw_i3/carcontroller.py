@@ -18,6 +18,7 @@ class CarController(CarControllerBase):
     self.VM = VehicleModel(CP)
     self.apply_angle_last = 0.0
     self.shadow_cnt = 0
+    self.shadow_cycle = 0
     self.last_shadow_acc_values = None
     self.last_shadow_acc_bytes = b""
     self.last_shadow_long_debug = None
@@ -25,6 +26,11 @@ class CarController(CarControllerBase):
   def _next_shadow_cnt(self) -> int:
     self.shadow_cnt = (self.shadow_cnt + 1) % 16
     return self.shadow_cnt
+
+  def _next_shadow_cycle(self) -> int:
+    cycle = self.shadow_cycle
+    self.shadow_cycle = (self.shadow_cycle + 1) % 64
+    return cycle
 
   def _crc8_j1850(self, data: bytes, init_value: int = 0xF1) -> int:
     crc = init_value & 0xFF
@@ -43,20 +49,25 @@ class CarController(CarControllerBase):
       self.apply_angle_last = desired_angle
 
       if self.frame % 2 == 0:
+        cycle_count = self._next_shadow_cycle()
+        cnt1 = self._next_shadow_cnt()
+        lat_triggered = 1 if abs(desired_angle - CS.out.steeringAngleDeg) > 0.5 else 0
         values = {
-          "cycle_count": 1,
+          "cycle_count": cycle_count,
           "crc1": 0,
-          "cnt1": self._next_shadow_cnt(),
+          "cnt1": cnt1,
           "always_0x9": 9,
           "steering_angle_req": desired_angle,
           "steer_torque_req": 0.0,
           "TJA_ready": 0,
-          "assist_mode": 1,
-          "wayback_en1_lane_keeping_trigger": 0,
-          "lane_keeping_triggered": 0,
+          # Match the dynm/smnogar/BMW SP2018 method defaults unless route
+          # evidence proves otherwise.
+          "assist_mode": 0,
+          "wayback_en1_lane_keeping_trigger": lat_triggered,
+          "lane_keeping_triggered": lat_triggered,
           "like_assist_torque_reserve": 0xA0,
           "constants": 0x03ff17fe,
-          "wayback_en_2": 0,
+          "wayback_en_2": lat_triggered,
           "steering_engaged": 2,
           "maybe_assist_force_enhance": 0xA2,
           "maybe_assist_force_weaken": 0xFA,
@@ -71,8 +82,11 @@ class CarController(CarControllerBase):
           carlog.warning({
             "event": "bmw_i3_shadow_acc",
             "angle_deg": round(desired_angle, 3),
-            "cnt1": values["cnt1"],
+            "cycle_count": cycle_count,
+            "cnt1": cnt1,
             "crc1": values["crc1"],
+            "assist_mode": values["assist_mode"],
+            "lat_triggered": lat_triggered,
             "payload": self.last_shadow_acc_bytes.hex(),
           })
 

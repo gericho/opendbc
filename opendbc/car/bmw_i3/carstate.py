@@ -15,16 +15,18 @@ class CarState(CarStateBase):
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     super().__init__(CP, CP_SP)
     self.shifter_values = CANDefine(DBC[CP.carFingerprint][Bus.pt]).dv.get("DRIVE_STATE_EXPERIMENTAL", {})
-    self.old_acc_ctrl_state = 0
-    self.old_acc_ctrl_gate = 0
-    self.old_tja_active = False
-    self.old_acc_base_active = False
-    self.old_assist_advanced = False
-    self.old_stalk_main_a = 0
-    self.old_stalk_main_b = 0
-    self.old_acc_button = False
-    self.old_tja_button = False
-    self.old_speed_adjust = False
+    # These helpers originally came from historical route correlation work, but
+    # 131/135/97 remain the current primary stock ACC/TJA state/button families.
+    self.stock_acc_ctrl_state = 0
+    self.stock_acc_ctrl_gate = 0
+    self.stock_tja_active = False
+    self.stock_acc_base_active = False
+    self.stock_assist_advanced = False
+    self.stock_stalk_main_a = 0
+    self.stock_stalk_main_b = 0
+    self.stock_acc_button = False
+    self.stock_tja_button = False
+    self.stock_speed_adjust = False
     self.legacy_main_button = 0
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
@@ -67,7 +69,9 @@ class CarState(CarStateBase):
     ret.steeringPressed = abs(ret.steeringTorque) > 1.0
 
     ret.yawRate = float(cp_flexray.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
-    ret.brake = float(cp_can.vl.get("PEDAL_OR_HOLD_STATE_CANDIDATE", {}).get("PEDAL_HOLD_STATE_RAW", 0.0))
+    # No physical brake-pressure value is closed yet. Keep brake at zero and use
+    # brakePressed from PT-CAN 796 for the boolean path.
+    ret.brake = 0.0
 
     # Best current stock longitudinal helper branches:
     #   59 -> powertrain-intent proxy
@@ -121,31 +125,31 @@ class CarState(CarStateBase):
       self.drive_state_gear_est = Counter(self.drive_state_kind_hist).most_common(1)[0][0]
     ret.gearShifter = self.drive_state_gear_est
 
-    old_ctrl_state = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
-    old_ctrl_gate = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))
-    old_stalk_main_a = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
-    old_stalk_main_b = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
-    self.old_acc_ctrl_state = old_ctrl_state
-    self.old_acc_ctrl_gate = old_ctrl_gate
-    self.old_acc_base_active = old_ctrl_state == 16610
-    self.old_assist_advanced = old_ctrl_state == 24802
-    self.old_tja_active = self.old_assist_advanced
-    self.old_stalk_main_a = old_stalk_main_a
-    self.old_stalk_main_b = old_stalk_main_b
+    stock_ctrl_state = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
+    stock_ctrl_gate = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))
+    stock_stalk_main_a = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
+    stock_stalk_main_b = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
+    self.stock_acc_ctrl_state = stock_ctrl_state
+    self.stock_acc_ctrl_gate = stock_ctrl_gate
+    self.stock_acc_base_active = stock_ctrl_state == 16610
+    self.stock_assist_advanced = stock_ctrl_state == 24802
+    self.stock_tja_active = self.stock_assist_advanced
+    self.stock_stalk_main_a = stock_stalk_main_a
+    self.stock_stalk_main_b = stock_stalk_main_b
     # Legacy route correlation:
     # 30716/65282 -> ACC button family
     # 18684/65283 -> TJA button family
     # 5884/65282  -> speed stalk +/- family
-    self.old_acc_button = old_stalk_main_a == 30716 and old_stalk_main_b == 65282
-    self.old_tja_button = old_stalk_main_a == 18684 and old_stalk_main_b == 65283
-    self.old_speed_adjust = old_stalk_main_a == 5884 and old_stalk_main_b == 65282
+    self.stock_acc_button = stock_stalk_main_a == 30716 and stock_stalk_main_b == 65282
+    self.stock_tja_button = stock_stalk_main_a == 18684 and stock_stalk_main_b == 65283
+    self.stock_speed_adjust = stock_stalk_main_a == 5884 and stock_stalk_main_b == 65282
 
     # Old and modern ACC-only/TJA routes show the clearest stable states here:
     # 35041/643 -> off baseline
     # 16610/3584 -> ACC active base state
     # 24802/(640 or 656) -> advanced assist state / TJA-requested-or-gated branch
-    acc_enabled = old_ctrl_state in (16610, 24802)
-    acc_available = acc_enabled or old_ctrl_gate in (640, 656, 3584)
+    acc_enabled = stock_ctrl_state in (16610, 24802)
+    acc_available = acc_enabled or stock_ctrl_gate in (640, 656, 3584)
 
     ret.cruiseState.available = acc_available
     ret.cruiseState.enabled = acc_enabled
@@ -184,9 +188,9 @@ class CarState(CarStateBase):
     #   30716 / 65282 -> ACC main button family
     #   18684 / 65283 -> TJA / lane-assist main button family
     self.legacy_main_button = 0
-    if self.old_acc_button:
+    if self.stock_acc_button:
       self.legacy_main_button = 1
-    elif self.old_tja_button:
+    elif self.stock_tja_button:
       self.legacy_main_button = 2
 
     ret.buttonEvents = [

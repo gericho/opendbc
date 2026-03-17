@@ -44,9 +44,10 @@ BO_ 46 WHEEL_SPEED: 17 BMW_I3
  CM_ BO_ 46 "Confirmed vehicle-dynamics helper. Wheel speeds remain a valid fallback and consistency check, but BMW-style vehicle speed comes primarily from frame 55 in current CarState.";
 
 BO_ 49 STEER_TORQUE: 17 BMW_I3
- SG_ DRIVER_STEER_TORQUE_RAW : 8|16@1- (0.01,0) [-50|50] "Nm" BMW_I3
+ SG_ STEER_TORQUE_CYCLE_RAW : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ DRIVER_STEER_TORQUE_BMW : 24|12@1+ (0.005,-10) [-10|10.475] "Nm" BMW_I3
  SG_ STEER_TORQUE_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
- CM_ BO_ 49 "Confirmed steering-torque helper. DRIVER_STEER_TORQUE_RAW is used for steering-state interpretation and shadow lateral correlation.";
+ CM_ BO_ 49 "Confirmed steering-torque helper. BMW-style driver torque lives in the 24|12 field and is valid on the cycle-0 subframe. CarState uses this path for steeringTorque/steeringPressed.";
 
 BO_ 51 EPS_ANGLE: 17 BMW_I3
  SG_ STEERING_ANGLE_RAW : 8|16@1- (0.1,0) [-1000|1000] "deg" BMW_I3

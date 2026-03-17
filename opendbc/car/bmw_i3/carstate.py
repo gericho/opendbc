@@ -39,6 +39,7 @@ class CarState(CarStateBase):
     self.long_54_wc = 0
     self.long_54_b4 = 0
     self.long_54_b6 = 0
+    self.driver_steer_torque = 0.0
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -65,8 +66,12 @@ class CarState(CarStateBase):
     ret.standstill = ret.vEgoRaw < 0.1
 
     ret.steeringAngleDeg = float(cp_flexray.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
-    ret.steeringTorque = float(cp_flexray.vl.get("STEER_TORQUE", {}).get("DRIVER_STEER_TORQUE_RAW", 0.0))
-    ret.steeringPressed = abs(ret.steeringTorque) > 1.0
+    steer_torque = cp_flexray.vl.get("STEER_TORQUE", {})
+    steer_torque_cycle = int(steer_torque.get("STEER_TORQUE_CYCLE_RAW", -1))
+    if steer_torque_cycle == 0:
+      self.driver_steer_torque = float(steer_torque.get("DRIVER_STEER_TORQUE_BMW", self.driver_steer_torque))
+    ret.steeringTorque = self.driver_steer_torque
+    ret.steeringPressed = abs(ret.steeringTorque) > 1.5
 
     ret.yawRate = float(cp_flexray.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
     # No physical brake-pressure value is closed yet. Keep brake at zero and use

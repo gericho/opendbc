@@ -216,14 +216,49 @@ class CarState(CarStateBase):
 
   @staticmethod
   def get_can_parsers(CP, CP_SP):
-    # Many BMW i3 helper frames on this custom FlexRay/CAN gateway are optional,
-    # route-dependent, or phase-dependent. Requiring them for parser liveness
-    # makes `canValid` flap and surfaces as the generic "Unknown Vehicle Variant"
-    # alert even when the fingerprint is correct. Parse the bus without required
-    # alive checks and let individual signals fall back to defaults when absent.
     dbc = DBC[CP.carFingerprint][Bus.pt]
+    pt_messages = [
+      ("ACC_TJA_OLD_ROUTE_HELPER_D", float("nan")),
+      ("ACC_TJA_OLD_ROUTE_HELPER_E", float("nan")),
+    ]
+    cam_messages = [
+      ("WHEEL_SPEED", float("nan")),
+      ("STEER_TORQUE", float("nan")),
+      ("EPS_ANGLE", float("nan")),
+      ("VEHICLE_SPEED_PROV", float("nan")),
+      ("DYNAMICS_YAW_PROV", float("nan")),
+      ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
+      ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
+      ("DRIVE_STATE_EXPERIMENTAL", float("nan")),
+      ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),
+    ]
+    party_messages = [
+      ("PTCAN_ACCELERATOR_CANDIDATE", float("nan")),
+      ("PTCAN_BRAKE_PRESSED_CANDIDATE", float("nan")),
+      ("PTCAN_BLINKER_STATE_CANDIDATE", float("nan")),
+      ("PTCAN_CRUISE_BUTTONS_MAIN", float("nan")),
+      ("PTCAN_DRIVER_DOOR_CANDIDATE", float("nan")),
+    ]
+
+    cp_pt = CANParser(dbc, pt_messages, 0)
+    cp_cam = CANParser(dbc, cam_messages, 1)
+    cp_party = CANParser(dbc, party_messages, 2)
+
+    # This custom FlexRay/CAN gateway exports many stock BMW frames without
+    # stable checksum/counter semantics. Follow the dynm/BMW approach:
+    # register the messages we actually consume, then relax checks so data can
+    # flow while reverse work is still in progress.
+    for cp, msg_names in (
+      (cp_pt, [name for name, _ in pt_messages]),
+      (cp_cam, [name for name, _ in cam_messages]),
+      (cp_party, [name for name, _ in party_messages]),
+    ):
+      for msg in msg_names:
+        cp.dbc.name_to_msg[msg].ignore_checksum = True
+        cp.dbc.name_to_msg[msg].ignore_counter = True
+
     return {
-      Bus.pt: CANParser(dbc, [], 0),
-      Bus.cam: CANParser(dbc, [], 1),
-      Bus.party: CANParser(dbc, [], 2),
+      Bus.pt: cp_pt,
+      Bus.cam: cp_cam,
+      Bus.party: cp_party,
     }

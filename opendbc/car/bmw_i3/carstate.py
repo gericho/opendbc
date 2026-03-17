@@ -20,7 +20,7 @@ class CarState(CarStateBase):
     self.stock_acc_ctrl_state = 0
     self.stock_acc_ctrl_gate = 0
     self.stock_tja_active = False
-    self.stock_acc_base_active = False
+    self.stock_acc_base_armed = False
     self.stock_assist_advanced = False
     self.stock_stalk_main_a = 0
     self.stock_stalk_main_b = 0
@@ -131,7 +131,7 @@ class CarState(CarStateBase):
     stock_stalk_main_b = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
     self.stock_acc_ctrl_state = stock_ctrl_state
     self.stock_acc_ctrl_gate = stock_ctrl_gate
-    self.stock_acc_base_active = stock_ctrl_state == 16610
+    self.stock_acc_base_armed = stock_ctrl_state == 16610
     self.stock_assist_advanced = stock_ctrl_state == 24802
     self.stock_tja_active = self.stock_assist_advanced
     self.stock_stalk_main_a = stock_stalk_main_a
@@ -146,8 +146,8 @@ class CarState(CarStateBase):
 
     # Old and modern ACC-only/TJA routes show the clearest stable states here:
     # 35041/643 -> off baseline
-    # 16610/3584 -> ACC active base state
-    # 24802/(640 or 656) -> advanced assist state / TJA-requested-or-gated branch
+    # 16610/3584 -> ACC base armed/ready state
+    # 24802/(640 or 656) -> advanced assist state / actual managed-control branch
     acc_enabled = stock_ctrl_state in (16610, 24802)
     acc_available = acc_enabled or stock_ctrl_gate in (640, 656, 3584)
 

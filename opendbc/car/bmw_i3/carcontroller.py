@@ -113,7 +113,7 @@ class CarController(CarControllerBase):
       "long_active": bool(CC.longActive),
       "gate": int(getattr(CS, "stock_acc_ctrl_gate", 0)),
       "state": int(getattr(CS, "stock_acc_ctrl_state", 0)),
-      "acc_base_active": bool(getattr(CS, "stock_acc_base_active", False)),
+      "acc_base_armed": bool(getattr(CS, "stock_acc_base_armed", False)),
       "assist_advanced": bool(getattr(CS, "stock_assist_advanced", False)),
       "tja_active": bool(getattr(CS, "stock_tja_active", False)),
       "v_ego": float(CS.out.vEgoRaw),

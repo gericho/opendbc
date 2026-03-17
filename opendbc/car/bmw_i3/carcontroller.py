@@ -64,7 +64,11 @@ class CarController(CarControllerBase):
       cycle_count = self._next_shadow_cycle()
       if cycle_count % 4 == 1:
         cnt1 = self._next_shadow_cnt()
-        lat_triggered = 1 if abs(desired_angle - CS.out.steeringAngleDeg) > 0.5 else 0
+        angle_error = abs(desired_angle - CS.out.steeringAngleDeg)
+        driver_override = bool(CS.out.steeringPressed)
+        tja_ready = int(CS.out.vEgoRaw > 0.1 and not driver_override)
+        lat_triggered = int(tja_ready and angle_error > 0.5)
+        steering_engaged = 2 if tja_ready else 1
         steer_torque_req = self._shadow_steer_torque_req(desired_angle, CS.out.steeringAngleDeg)
         torque_reserve = self._shadow_torque_reserve(CS.out.steeringTorque)
         values = {
@@ -74,7 +78,7 @@ class CarController(CarControllerBase):
           "always_0x9": 9,
           "steering_angle_req": desired_angle,
           "steer_torque_req": steer_torque_req,
-          "TJA_ready": 0,
+          "TJA_ready": tja_ready,
           # Match the dynm/smnogar/BMW SP2018 method defaults unless route
           # evidence proves otherwise.
           "assist_mode": 0,
@@ -83,7 +87,7 @@ class CarController(CarControllerBase):
           "like_assist_torque_reserve": torque_reserve,
           "constants": 0x03ff17fe,
           "wayback_en_2": lat_triggered,
-          "steering_engaged": 2,
+          "steering_engaged": steering_engaged,
           "maybe_assist_force_enhance": 0xA2,
           "maybe_assist_force_weaken": 0xFA,
         }
@@ -101,7 +105,10 @@ class CarController(CarControllerBase):
             "cnt1": cnt1,
             "crc1": values["crc1"],
             "assist_mode": values["assist_mode"],
+            "tja_ready": tja_ready,
+            "driver_override": driver_override,
             "lat_triggered": lat_triggered,
+            "steering_engaged": steering_engaged,
             "steer_torque_req": round(steer_torque_req, 3),
             "torque_reserve": torque_reserve,
             "payload": self.last_shadow_acc_bytes.hex(),

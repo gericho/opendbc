@@ -40,6 +40,7 @@ class CarState(CarStateBase):
     self.long_54_b4 = 0
     self.long_54_b6 = 0
     self.driver_steer_torque = 0.0
+    self.vehicle_speed_kph = 0.0
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -56,11 +57,14 @@ class CarState(CarStateBase):
 
     wheel_speeds = [ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr]
     wheel_speed_avg = float(sum(wheel_speeds) / 4.0)
-    # Match the dynm/SP2018 BMW method semantically: prefer vehicle speed from
-    # frame 55 as the primary fused vehicle-speed source, and use wheel speeds
-    # only as fallback / sanity support.
-    vehicle_speed_kph = float(cp_flexray.vl.get("VEHICLE_SPEED_PROV", {}).get("VEHICLE_SPEED_RAW_A", 0.0))
-    ret.vEgoRaw = vehicle_speed_kph * CV.KPH_TO_MS if vehicle_speed_kph > 0.0 else wheel_speed_avg
+    # Match the dynm/SP2018 BMW method semantically: consume vehicle speed only
+    # from the valid m3 subframe of frame 55, and keep frame 46 wheel speeds as
+    # fallback / consistency support.
+    vehicle_speed = cp_flexray.vl.get("VEHICLE_SPEED_PROV", {})
+    vehicle_speed_cycle = int(vehicle_speed.get("VEHICLE_SPEED_CYCLE_RAW", -1))
+    if vehicle_speed_cycle == 3:
+      self.vehicle_speed_kph = float(vehicle_speed.get("VEHICLE_SPEED_BMW", self.vehicle_speed_kph))
+    ret.vEgoRaw = self.vehicle_speed_kph * CV.KPH_TO_MS if self.vehicle_speed_kph > 0.0 else wheel_speed_avg
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     ret.vEgoCluster = ret.vEgoRaw
     ret.standstill = ret.vEgoRaw < 0.1

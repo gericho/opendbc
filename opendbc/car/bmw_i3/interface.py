@@ -2,6 +2,7 @@ from opendbc.car import get_safety_config, structs
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.bmw_i3.carcontroller import CarController
 from opendbc.car.bmw_i3.carstate import CarState
+from openpilot.system.hardware import PC
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -29,8 +30,14 @@ class CarInterface(CarInterfaceBase):
     ret.lateralTuning.pid.kpV = [0.45, 0.40, 0.35, 0.30]
     ret.lateralTuning.pid.kiBP = [0., 10., 20., 35.]
     ret.lateralTuning.pid.kiV = [0.12, 0.10, 0.08, 0.06]
-    ret.safetyConfigs = [
-      get_safety_config(structs.CarParams.SafetyModel.noOutput),   # internal panda
-      get_safety_config(structs.CarParams.SafetyModel.allOutput),  # external panda
-    ]
+    # PC bring-up uses a single pico-flexray panda. Advertising a dual-panda
+    # safety layout causes selfdrived controlsMismatch, since panda 0 is the
+    # active allOutput device rather than an internal noOutput panda.
+    if PC:
+      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.allOutput)]
+    else:
+      ret.safetyConfigs = [
+        get_safety_config(structs.CarParams.SafetyModel.noOutput),   # internal panda
+        get_safety_config(structs.CarParams.SafetyModel.allOutput),  # external panda
+      ]
     return ret

@@ -93,7 +93,7 @@ BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
  SG_ BRAKE_BLEND_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LONG_TX_BRAKE_BLEND_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LONG_TX_BRAKE_BLEND_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
- CM_ SG_ 54 BRAKE_BLEND_STATE_A "Primary brake-blend / regen-support candidate. Across 00000054, 00000055, and modern ACC-only route 000000b3, this frame cleanly separates manual accelerator application, ACC-base, and managed/following phases. STATE_B and STATE_C rise strongly in managed-following and automatic decel windows, making this the best current stock longitudinal support frame for brake-blend / regen behavior.";
+CM_ SG_ 54 BRAKE_BLEND_STATE_A "Primary brake-blend / regen-support candidate. Across 00000054, 00000055, modern ACC-only route 000000b3, and recent ACC-only route 00000147, this frame cleanly separates manual accelerator application, ACC armed/base, and managed/following phases. STATE_B and STATE_C rise strongly in managed-following and automatic decel windows. In 00000147, frame 54 becomes active in complementary subframes while 59 carries the powertrain-intent side, reinforcing that 54 is the best current stock longitudinal support frame for brake-blend / regen behavior rather than a standalone brake command.";
 
 BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
  SG_ PEDAL_HOLD_STATE_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -106,7 +106,7 @@ BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
  SG_ LONG_TX_POWERTRAIN_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ LONG_TX_POWERTRAIN_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LONG_TX_POWERTRAIN_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
- CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Strongest stock longitudinal content candidate so far. Across 00000054, 00000055, and 000000b3, RAW is high during clear manual accelerator application, lower in ACC-base, and lowest during managed/following windows. AUX also shifts strongly between manual and managed phases. This is the best current candidate for stock pedal/hold/coast-state inference under ACC.";
+CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Strongest stock longitudinal content candidate so far. Across 00000054, 00000055, 000000b3, and recent ACC-only route 00000147, RAW is high during clear manual accelerator application, lower in ACC armed/base, and lowest during managed/following windows. AUX also shifts strongly between manual and managed phases. In 00000147 managed ACC, 59 remains the dominant powertrain-intent family while 54 appears in complementary brake-blend subframes. This remains the best current candidate for stock pedal/hold/coast-state inference under ACC, not a closed accel command.";
 
 BO_ 72 LAT_STOCK_TX_CANDIDATE: 17 BMW_I3
  SG_ LAT_STOCK_TX_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -214,7 +214,7 @@ BO_ 131 ACC_TJA_OLD_ROUTE_HELPER_D: 17 BMW_I3
  SG_ ACC_TJA_OLD_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_GATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_LONG_GATE_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 131 "Primary longitudinal state/gate helper. Across legacy TJA routes 00000054/55/56 and modern ACC-only route 000000b3, this frame separates OFF (643), ACC base armed/ready state (3584), and managed/following assist states (640/656). Best current gate/state coarse indicator for stock ACC behavior.";
+CM_ BO_ 131 "Primary longitudinal state/gate helper. Across legacy TJA routes 00000054/55/56, modern ACC-only route 000000b3, and recent ACC-only route 00000147, this frame separates OFF (643), ACC base armed/ready state (3584), transition into managed (640 with 135=26850), and managed/following assist states (640/656 with 135=24802). Best current gate/state coarse indicator for stock ACC behavior.";
 
 BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -224,7 +224,7 @@ BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_LONG_MAIN_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 135 "Primary longitudinal main-state helper. Across legacy TJA routes 00000054/55/56 and modern ACC-only route 000000b3, this frame separates OFF (35041), ACC base armed/ready state (16610), and managed/following assist state (24802). Best current stock ACC state indicator.";
+CM_ BO_ 135 "Primary longitudinal main-state helper. Across legacy TJA routes 00000054/55/56, modern ACC-only route 000000b3, and recent ACC-only route 00000147, this frame separates OFF (35041), ACC base armed/ready state (16610), transition into managed (26850), and managed/following assist state (24802). Best current stock ACC state indicator.";
 
 BO_ 241 ACC_TJA_OLD_ROUTE_HELPER_F: 17 BMW_I3
  SG_ ACC_TJA_OLD_F_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3

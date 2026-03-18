@@ -12,6 +12,14 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
+  @staticmethod
+  def _decode_eps_angle(angle_raw: float) -> float:
+    # Live routes show frame 51 behaving like a wrapped steering-wheel angle
+    # rather than a clean signed +-1000 deg signal. Re-center it to the nearest
+    # turn within a practical steering-wheel range until the final DBC formula
+    # is closed mathematically.
+    return ((float(angle_raw) + 512.0) % 1024.0) - 512.0
+
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     super().__init__(CP, CP_SP)
     self.shifter_values = CANDefine(DBC[CP.carFingerprint][Bus.pt]).dv.get("DRIVE_STATE_EXPERIMENTAL", {})
@@ -41,6 +49,26 @@ class CarState(CarStateBase):
     self.long_54_b6 = 0
     self.driver_steer_torque = 0.0
     self.vehicle_speed_kph = 0.0
+    self.stock_lat96_phase = 0
+    self.stock_lat96_b1 = 0
+    self.stock_lat112_b5 = 0
+    self.stock_lat116_b5 = 0
+    self.stock_lat_active_hint = False
+    self.stock_lat_dir_hint = "unknown"
+    self.stock_lat_dir_confidence = "none"
+
+  @staticmethod
+  def _stock_lat_dir_from_phase_b1(phase: int, b1: int) -> tuple[str, str]:
+    # Best current route-derived local classifier for LAT96.byte1.
+    # This is intentionally phase-local, not a fake global signed command.
+    # Strongest phase: 60. Secondary supporting phases: 24 and 8.
+    if phase == 60:
+      return ("right", "high") if b1 > 112 else ("left", "high")
+    if phase == 24:
+      return ("right", "medium") if b1 > 81 else ("left", "medium")
+    if phase == 8:
+      return ("right", "medium") if b1 > 150 else ("left", "medium")
+    return ("unknown", "none")
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -69,7 +97,8 @@ class CarState(CarStateBase):
     ret.vEgoCluster = ret.vEgoRaw
     ret.standstill = ret.vEgoRaw < 0.1
 
-    ret.steeringAngleDeg = float(cp_flexray.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
+    eps_angle_raw = float(cp_flexray.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
+    ret.steeringAngleDeg = self._decode_eps_angle(eps_angle_raw)
     steer_torque = cp_flexray.vl.get("STEER_TORQUE", {})
     steer_torque_cycle = int(steer_torque.get("STEER_TORQUE_CYCLE_RAW", -1))
     if steer_torque_cycle == 0:
@@ -96,6 +125,23 @@ class CarState(CarStateBase):
     self.long_54_wc = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_C", 0))
     self.long_54_b4 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_4", 0))
     self.long_54_b6 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_6", 0))
+
+    lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
+    self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
+    self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
+    lat112 = cp_flexray.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
+    lat116 = cp_flexray.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
+    self.stock_lat112_b5 = int(lat112.get("LAT_STOCK_MAIN_BYTE_5", 0))
+    self.stock_lat116_b5 = int(lat116.get("LAT_STOCK_SUPPORT_BYTE_5", 0))
+    # Best current live discriminator from route work:
+    #   112.byte5 bit5 set   -> manual/off tendency
+    #   112.byte5 bit5 clear -> assisted/TJA tendency
+    self.stock_lat_active_hint = (self.stock_lat112_b5 & 0x20) == 0
+
+    self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b1(self.stock_lat96_phase, self.stock_lat96_b1)
+    if not self.stock_lat_active_hint:
+      self.stock_lat_dir_hint = "unknown"
+      self.stock_lat_dir_confidence = "none"
 
     gas_raw = int(cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
     ret.gasPressed = gas_raw > 200
@@ -229,6 +275,9 @@ class CarState(CarStateBase):
       ("DYNAMICS_YAW_PROV", float("nan")),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
       ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
+      ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
+      ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
+      ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE_EXPERIMENTAL", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),
     ]

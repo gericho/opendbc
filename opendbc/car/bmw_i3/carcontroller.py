@@ -15,6 +15,8 @@ class CarController(CarControllerBase):
   LONG_59_CENTER_WC = 32767
   LONG_54_CENTER_WB = 65025
   LONG_54_CENTER_WC = 7
+  LATERAL_FORCE_WEAKEN_BP = [22.0, 31.0]
+  LATERAL_FORCE_WEAKEN_V = [250.0, 250.0]
 
   def __init__(self, dbc_names, CP, CP_SP):
     super().__init__(dbc_names, CP, CP_SP)
@@ -81,6 +83,18 @@ class CarController(CarControllerBase):
       "tx_target_wc": self.LONG_59_CENTER_WC,
     }
 
+  def _shadow_force_weaken(self, v_ego: float) -> int:
+    # Mirror the smnogar BMW lateral method explicitly. Their current i4 fit
+    # keeps the weaken field at a stock-like 250 over the validated speed band;
+    # keep the interpolation form so future i3-specific tuning can change the
+    # breakpoints/values without changing the payload logic again.
+    if v_ego <= self.LATERAL_FORCE_WEAKEN_BP[0]:
+      return int(self.LATERAL_FORCE_WEAKEN_V[0])
+    if v_ego >= self.LATERAL_FORCE_WEAKEN_BP[-1]:
+      return int(self.LATERAL_FORCE_WEAKEN_V[-1])
+    a = (v_ego - self.LATERAL_FORCE_WEAKEN_BP[0]) / (self.LATERAL_FORCE_WEAKEN_BP[-1] - self.LATERAL_FORCE_WEAKEN_BP[0])
+    return int(round(self.LATERAL_FORCE_WEAKEN_V[0] + a * (self.LATERAL_FORCE_WEAKEN_V[-1] - self.LATERAL_FORCE_WEAKEN_V[0])))
+
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
 
@@ -100,6 +114,7 @@ class CarController(CarControllerBase):
         steering_engaged = 2 if tja_ready else 1
         steer_torque_req = self._shadow_steer_torque_req(desired_angle, CS.out.steeringAngleDeg)
         torque_reserve = self._shadow_torque_reserve(CS.out.steeringTorque)
+        force_weaken = self._shadow_force_weaken(CS.out.vEgoRaw)
         values = {
           "cycle_count": cycle_count,
           "crc1": 0,
@@ -118,7 +133,7 @@ class CarController(CarControllerBase):
           "wayback_en_2": lat_triggered,
           "steering_engaged": steering_engaged,
           "maybe_assist_force_enhance": 0xA2,
-          "maybe_assist_force_weaken": 0xFA,
+          "maybe_assist_force_weaken": force_weaken,
         }
         msg = self.shadow_packer.make_can_msg("ACC", 4, values)
         payload = bytearray(msg[1])
@@ -138,8 +153,16 @@ class CarController(CarControllerBase):
             "driver_override": driver_override,
             "lat_triggered": lat_triggered,
             "steering_engaged": steering_engaged,
+            "stock_lat96_phase": int(getattr(CS, "stock_lat96_phase", 0)),
+            "stock_lat96_b1": int(getattr(CS, "stock_lat96_b1", 0)),
+            "stock_lat112_b5": int(getattr(CS, "stock_lat112_b5", 0)),
+            "stock_lat116_b5": int(getattr(CS, "stock_lat116_b5", 0)),
+            "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
+            "stock_lat_dir_hint": str(getattr(CS, "stock_lat_dir_hint", "unknown")),
+            "stock_lat_dir_confidence": str(getattr(CS, "stock_lat_dir_confidence", "none")),
             "steer_torque_req": round(steer_torque_req, 3),
             "torque_reserve": torque_reserve,
+            "force_weaken": force_weaken,
             "payload": self.last_shadow_acc_bytes.hex(),
           })
 

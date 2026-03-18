@@ -9,6 +9,13 @@ from opendbc.car.bmw.values import CarControllerParams
 
 
 class CarController(CarControllerBase):
+  LONG_59_ACTIVE_PARITY = 0
+  LONG_54_ACTIVE_PARITY = 1
+  LONG_59_CENTER_WB = 32777
+  LONG_59_CENTER_WC = 32767
+  LONG_54_CENTER_WB = 65025
+  LONG_54_CENTER_WC = 7
+
   def __init__(self, dbc_names, CP, CP_SP):
     super().__init__(dbc_names, CP, CP_SP)
     # Shadow-only builder based on the existing BMW SP2018 ACC/72 method.
@@ -51,6 +58,28 @@ class CarController(CarControllerBase):
     # rises. Keep a narrow, conservative range around the dynm default 0xA0.
     reserve = 0xA0 - int(min(0x30, abs(driver_torque) * 4.0))
     return max(0x70, min(0xA0, reserve))
+
+  def _shadow_long_tx_hint(self, desired_accel: float) -> dict[str, int | str]:
+    # Best current offline fit from the existing ACC routes:
+    #   59 = positive/coast branch, mainly active on even subcycles
+    #   54 = negative/brake-blend branch, mainly active on odd subcycles
+    # This is not a closed payload mapping yet; it is a conservative replay
+    # hint so the next live comparison uses the right branch family.
+    if desired_accel < -0.05:
+      return {
+        "tx_mode": "negative",
+        "tx_branch": 54,
+        "tx_parity": self.LONG_54_ACTIVE_PARITY,
+        "tx_target_wb": self.LONG_54_CENTER_WB,
+        "tx_target_wc": self.LONG_54_CENTER_WC,
+      }
+    return {
+      "tx_mode": "positive_or_coast",
+      "tx_branch": 59,
+      "tx_parity": self.LONG_59_ACTIVE_PARITY,
+      "tx_target_wb": self.LONG_59_CENTER_WB,
+      "tx_target_wc": self.LONG_59_CENTER_WC,
+    }
 
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
@@ -115,6 +144,7 @@ class CarController(CarControllerBase):
           })
 
     desired_accel = float(actuators.accel)
+    long_tx_hint = self._shadow_long_tx_hint(desired_accel)
     self.last_shadow_long_debug = {
       "desired_accel": desired_accel,
       "long_active": bool(CC.longActive),
@@ -137,6 +167,7 @@ class CarController(CarControllerBase):
       "long_54_wc": int(getattr(CS, "long_54_wc", 0)),
       "long_54_b4": int(getattr(CS, "long_54_b4", 0)),
       "long_54_b6": int(getattr(CS, "long_54_b6", 0)),
+      **long_tx_hint,
     }
     if self.frame % 50 == 0:
       carlog.warning({

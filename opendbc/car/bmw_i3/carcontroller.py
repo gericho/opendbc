@@ -192,6 +192,13 @@ class CarController(CarControllerBase):
       "long_54_wc": int(getattr(CS, "long_54_wc", 0)),
       "long_54_b4": int(getattr(CS, "long_54_b4", 0)),
       "long_54_b6": int(getattr(CS, "long_54_b6", 0)),
+      # Upstream PT-CAN long intent candidates:
+      "long_up_217_raw16": int(getattr(CS, "long_up_217_raw16", 0)),
+      "long_up_217_i4_compat12": int(getattr(CS, "long_up_217_i4_compat12", 0)),
+      "long_up_796_raw16": int(getattr(CS, "long_up_796_raw16", 0)),
+      "long_up_796_b1": int(getattr(CS, "long_up_796_b1", 0)),
+      "stock_long_upstream_mode": str(getattr(CS, "stock_long_upstream_mode", "unknown")),
+      "stock_long_upstream_confidence": str(getattr(CS, "stock_long_upstream_confidence", "none")),
       **long_tx_hint,
     }
     if self.frame % 50 == 0:

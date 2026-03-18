@@ -47,6 +47,12 @@ class CarState(CarStateBase):
     self.long_54_wc = 0
     self.long_54_b4 = 0
     self.long_54_b6 = 0
+    self.long_up_217_raw16 = 0
+    self.long_up_217_i4_compat12 = 0
+    self.long_up_796_raw16 = 0
+    self.long_up_796_b1 = 0
+    self.stock_long_upstream_mode = "unknown"
+    self.stock_long_upstream_confidence = "none"
     self.driver_steer_torque = 0.0
     self.vehicle_speed_kph = 0.0
     self.stock_lat96_phase = 0
@@ -90,6 +96,23 @@ class CarState(CarStateBase):
       scale = 90.0
       return (min(1.0, abs(b1 - thr) / scale), "low")
     return (0.0, "none")
+
+  @staticmethod
+  def _stock_long_upstream_hint(acc217_raw16: int, brake796_b1: int) -> tuple[str, str]:
+    # Best current route-backed upstream long interpretation:
+    #   217.raw16 separates positive/coast
+    #   796.byte1 separates negative/brake intent
+    # Conservative buckets from aTarget fit:
+    #   POS   -> 217.raw16 ~ 63334
+    #   COAST -> 217.raw16 ~ 63364
+    #   NEG   -> 796.byte1  ~ 13
+    if brake796_b1 <= 0x0F:
+      return ("negative", "medium")
+    if acc217_raw16 <= 63349:
+      return ("positive", "medium")
+    if acc217_raw16 >= 63350:
+      return ("coast", "medium")
+    return ("unknown", "none")
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -147,6 +170,17 @@ class CarState(CarStateBase):
     self.long_54_b4 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_4", 0))
     self.long_54_b6 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_6", 0))
 
+    pt_accel = cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {})
+    self.long_up_217_raw16 = int(pt_accel.get("ACCEL_RAW_PT_CAN", 0))
+    self.long_up_217_i4_compat12 = int(pt_accel.get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
+
+    pt_brake = cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {})
+    self.long_up_796_raw16 = int(pt_brake.get("BRAKE_PRESSED_RAW_PT_CAN", 0))
+    self.long_up_796_b1 = int(pt_brake.get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
+    self.stock_long_upstream_mode, self.stock_long_upstream_confidence = self._stock_long_upstream_hint(
+      self.long_up_217_raw16, self.long_up_796_b1
+    )
+
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
@@ -167,11 +201,10 @@ class CarState(CarStateBase):
       self.stock_lat_mag_hint = 0.0
       self.stock_lat_mag_confidence = "none"
 
-    gas_raw = int(cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
+    gas_raw = self.long_up_217_i4_compat12
     ret.gasPressed = gas_raw > 200
 
-    brake_can_byte1 = int(cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {}).get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
-    ret.brakePressed = brake_can_byte1 < 0x10
+    ret.brakePressed = self.long_up_796_b1 < 0x10
 
     drive_state = cp_flexray.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))

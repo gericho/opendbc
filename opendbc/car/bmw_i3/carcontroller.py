@@ -160,6 +160,8 @@ class CarController(CarControllerBase):
             "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
             "stock_lat_dir_hint": str(getattr(CS, "stock_lat_dir_hint", "unknown")),
             "stock_lat_dir_confidence": str(getattr(CS, "stock_lat_dir_confidence", "none")),
+            "stock_lat_mag_hint": round(float(getattr(CS, "stock_lat_mag_hint", 0.0)), 4),
+            "stock_lat_mag_confidence": str(getattr(CS, "stock_lat_mag_confidence", "none")),
             "steer_torque_req": round(steer_torque_req, 3),
             "torque_reserve": torque_reserve,
             "force_weaken": force_weaken,

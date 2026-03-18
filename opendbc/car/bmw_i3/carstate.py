@@ -56,6 +56,8 @@ class CarState(CarStateBase):
     self.stock_lat_active_hint = False
     self.stock_lat_dir_hint = "unknown"
     self.stock_lat_dir_confidence = "none"
+    self.stock_lat_mag_hint = 0.0
+    self.stock_lat_mag_confidence = "none"
 
   @staticmethod
   def _stock_lat_dir_from_phase_b1(phase: int, b1: int) -> tuple[str, str]:
@@ -69,6 +71,25 @@ class CarState(CarStateBase):
     if phase == 8:
       return ("right", "medium") if b1 > 150 else ("left", "medium")
     return ("unknown", "none")
+
+  @staticmethod
+  def _stock_lat_mag_from_phase_b1(phase: int, b1: int) -> tuple[float, str]:
+    # Current route-backed magnitude proxy is intentionally normalized, not a
+    # fake degree-accurate command. Phase 60 is the only family with strong
+    # enough signed correlation to call "high". Phases 24 and 8 remain weak.
+    if phase == 60:
+      thr = 112.083
+      scale = 110.0
+      return (min(1.0, abs(b1 - thr) / scale), "high")
+    if phase == 24:
+      thr = 80.833
+      scale = 135.0
+      return (min(1.0, abs(b1 - thr) / scale), "low")
+    if phase == 8:
+      thr = 149.5
+      scale = 90.0
+      return (min(1.0, abs(b1 - thr) / scale), "low")
+    return (0.0, "none")
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -139,9 +160,12 @@ class CarState(CarStateBase):
     self.stock_lat_active_hint = (self.stock_lat112_b5 & 0x20) == 0
 
     self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b1(self.stock_lat96_phase, self.stock_lat96_b1)
+    self.stock_lat_mag_hint, self.stock_lat_mag_confidence = self._stock_lat_mag_from_phase_b1(self.stock_lat96_phase, self.stock_lat96_b1)
     if not self.stock_lat_active_hint:
       self.stock_lat_dir_hint = "unknown"
       self.stock_lat_dir_confidence = "none"
+      self.stock_lat_mag_hint = 0.0
+      self.stock_lat_mag_confidence = "none"
 
     gas_raw = int(cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {}).get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
     ret.gasPressed = gas_raw > 200

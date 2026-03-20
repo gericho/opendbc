@@ -53,6 +53,8 @@ class CarState(CarStateBase):
     self.long_up_217_i4_compat12 = 0
     self.long_up_796_raw16 = 0
     self.long_up_796_b1 = 0
+    self.brake_239_word23 = 32000
+    self.brake_239_word56 = 32000
     self.stock_long_upstream_mode = "unknown"
     self.stock_long_upstream_confidence = "none"
     self.driver_steer_torque = 0.0
@@ -179,6 +181,10 @@ class CarState(CarStateBase):
     self.long_up_217_value = max(0, min(4000, int(pt_accel.get("ACCELERATOR_VALUE_PT_CAN", 0))))
     self.long_up_217_i4_compat12 = int(pt_accel.get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
 
+    pt_brake_aux = cp_can.vl.get("PTCAN_CRUISE_BUTTONS_AUX", {})
+    self.brake_239_word23 = int(pt_brake_aux.get("BRAKE_PEDAL_WORD23_PT_CAN", 32000))
+    self.brake_239_word56 = int(pt_brake_aux.get("BRAKE_PEDAL_WORD56_PT_CAN", 32000))
+
     pt_brake = cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {})
     self.long_up_796_raw16 = int(pt_brake.get("BRAKE_PRESSED_RAW_PT_CAN", 0))
     self.long_up_796_b1 = int(pt_brake.get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
@@ -207,14 +213,11 @@ class CarState(CarStateBase):
       self.stock_lat_mag_hint = 0.0
       self.stock_lat_mag_confidence = "none"
 
-    ret.gas = self.long_up_217_value / 4000.0
-    ret.gasPressed = self.long_up_217_value > 0
+    ret.gasPressed = self.long_up_217_value > 100
 
-    # brakePressed is intentionally left disabled until we separate true pedal
-    # input from stop-lamp / regen / hold side effects. Recent isolated brake
-    # and gas routes show frame 538 moves during gas activity as well, so it is
-    # not a safe pedal boolean yet.
-    ret.brakePressed = False
+    brake_delta = max(0.0, 32000.0 - float(self.brake_239_word56))
+    ret.brake = min(1.0, brake_delta / 2060.0)
+    ret.brakePressed = brake_delta > 10.0
 
     drive_state = cp_flexray.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
@@ -360,6 +363,7 @@ class CarState(CarStateBase):
     ]
     party_messages = [
       ("PTCAN_ACCELERATOR_CANDIDATE", float("nan")),
+      ("PTCAN_CRUISE_BUTTONS_AUX", float("nan")),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", float("nan")),
       ("PTCAN_BRAKE_PEDAL_CANDIDATE", float("nan")),
       ("PTCAN_BLINKER_STATE_CANDIDATE", float("nan")),

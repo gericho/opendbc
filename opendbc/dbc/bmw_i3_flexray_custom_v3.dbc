@@ -318,8 +318,10 @@ BO_ 239 PTCAN_CRUISE_BUTTONS_AUX: 8 BMW_I3
  SG_ CRUISE_BTN_AUX_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ CRUISE_BTN_AUX_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ CRUISE_BTN_AUX_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ BRAKE_PEDAL_WORD23_PT_CAN : 16|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ BRAKE_PEDAL_WORD56_PT_CAN : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_PEDAL_I4_COMPAT_PT_CAN : 40|12@1+ (-1,3328) [0|3328] "" BMW_I3
-CM_ BO_ 239 "Experimental PT-CAN candidate from parked command-isolation routes. The first 16 bits changed distinctly across SET, RES, and distance-button presses. Cross-check against smnogar BMW i4 SP2018 DBC showed that bits 40|12 stay pinned near 3328 on current i3 brake routes, so this frame should remain a cruise-button support frame on CAN src 2, not the primary brake signal.";
+CM_ BO_ 239 "PT-CAN auxiliary frame carrying cruise-button support plus a promising friction-brake analog candidate on bytes 2:3 and 5:6. In the latest parked brake-only route, both 16-bit words sit near 32000 at release and decrease monotonically across light, medium, and strong pedal application. This still needs road validation against regen before promotion to production brake logic.";
 
 BO_ 274 PTCAN_BLINKER_STATE_CANDIDATE: 8 BMW_I3
  SG_ BLINKER_STATE_WORD0_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -347,7 +349,7 @@ CM_ BO_ 502 "Raw PT-CAN turn-signal helper aligned with the smnogar BMW KCAN DBC
 
 BO_ 538 PTCAN_BRAKE_PEDAL_CANDIDATE: 3 BMW_I3
  SG_ PTCAN_BRAKE_PEDAL_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 538 "PT-CAN decel / stop-lamp / brake-related helper candidate. Isolated parked brake route 000001a0 showed byte0 toggling between 0x00 and 0x80, but later isolated gas route 000001a1 also moved this byte. Do not treat it as a true brake pedal boolean until pedal input is separated from regen / stop-lamp / hold behavior.";
+CM_ BO_ 538 "PT-CAN decel / stop-lamp / brake-related helper candidate. It still moves with brake events, but later isolated gas work showed it is not specific enough to be treated as the true pedal source. Keep it as a secondary helper only; brake analog now comes from frame 239 bytes 5:6.";
 
 BO_ 663 PTCAN_SEATBELT_CANDIDATE_B: 7 BMW_I3
  SG_ PTCAN_SEATBELT_BYTE_2_B : 16|8@1+ (1,0) [0|255] "" BMW_I3

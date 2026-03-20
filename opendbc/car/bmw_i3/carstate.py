@@ -57,6 +57,8 @@ class CarState(CarStateBase):
     self.vehicle_speed_kph = 0.0
     self.stock_lat96_phase = 0
     self.stock_lat96_b1 = 0
+    self.stock_lat96_b2 = 0
+    self.stock_lat96_b3 = 0
     self.stock_lat112_b5 = 0
     self.stock_lat116_b5 = 0
     self.stock_lat_active_hint = False
@@ -184,6 +186,8 @@ class CarState(CarStateBase):
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
+    self.stock_lat96_b2 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_2", 0))
+    self.stock_lat96_b3 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_3", 0))
     lat112 = cp_flexray.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
     lat116 = cp_flexray.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
     self.stock_lat112_b5 = int(lat112.get("LAT_STOCK_MAIN_BYTE_5", 0))
@@ -269,13 +273,18 @@ class CarState(CarStateBase):
 
     blinker_byte6 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
     blinker_byte7 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
+    turn_left_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_LEFT_TURN_CANDIDATE", 0))
+    turn_right_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_RIGHT_TURN_CANDIDATE", 0))
+    turn_active_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_ACTIVE_CANDIDATE", 0))
+    turn_idle_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_IDLE_CANDIDATE", 0))
     main_cruise_word = int(cp_can.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
     driver_door_state = int(cp_can.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
-    # Latest isolated parked routes show the clearest side split here:
-    #   0x45 -> right indicator family
-    #   0x25 -> left indicator family
-    ret.rightBlinker = blinker_byte6 == 0x45
-    ret.leftBlinker = blinker_byte6 == 0x25
+    # Prefer the dedicated PT-CAN turn-signal helper frame over the noisier byte-family
+    # reverse from 274. The bit layout is already described in the custom DBC and gives
+    # us explicit left/right/active/idle candidates.
+    turn_asserted = bool(turn_active_candidate) and not bool(turn_idle_candidate)
+    ret.leftBlinker = turn_asserted and bool(turn_left_candidate) and not bool(turn_right_candidate)
+    ret.rightBlinker = turn_asserted and bool(turn_right_candidate) and not bool(turn_left_candidate)
     # Latest isolated parked seatbelt route shows:
     #   0xA5 -> buckled
     #   0xB5 -> unbuckled
@@ -342,6 +351,7 @@ class CarState(CarStateBase):
       ("PTCAN_ACCELERATOR_CANDIDATE", float("nan")),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", float("nan")),
       ("PTCAN_BLINKER_STATE_CANDIDATE", float("nan")),
+      ("PTCAN_TURNSIGNALS_CANDIDATE", float("nan")),
       ("PTCAN_CRUISE_BUTTONS_MAIN", float("nan")),
       ("PTCAN_DRIVER_DOOR_CANDIDATE", float("nan")),
     ]

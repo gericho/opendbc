@@ -48,6 +48,8 @@ class CarState(CarStateBase):
     self.long_54_b4 = 0
     self.long_54_b6 = 0
     self.long_up_217_raw16 = 0
+    self.long_up_217_word23 = 0
+    self.long_up_217_value = 0
     self.long_up_217_i4_compat12 = 0
     self.long_up_796_raw16 = 0
     self.long_up_796_b1 = 0
@@ -174,6 +176,8 @@ class CarState(CarStateBase):
 
     pt_accel = cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {})
     self.long_up_217_raw16 = int(pt_accel.get("ACCEL_RAW_PT_CAN", 0))
+    self.long_up_217_word23 = int(pt_accel.get("ACCELERATOR_WORD23_PT_CAN", 0))
+    self.long_up_217_value = max(0, min(4000, int(pt_accel.get("ACCELERATOR_VALUE_PT_CAN", 0))))
     self.long_up_217_i4_compat12 = int(pt_accel.get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
 
     pt_brake = cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {})
@@ -206,8 +210,8 @@ class CarState(CarStateBase):
       self.stock_lat_mag_hint = 0.0
       self.stock_lat_mag_confidence = "none"
 
-    gas_raw = self.long_up_217_i4_compat12
-    ret.gasPressed = gas_raw > 200
+    ret.gas = self.long_up_217_value / 4000.0
+    ret.gasPressed = self.long_up_217_value > 0
 
     # Replicated parked brake route 000001a0 isolates a cleaner brakePressed
     # source than the old 796 heuristic:

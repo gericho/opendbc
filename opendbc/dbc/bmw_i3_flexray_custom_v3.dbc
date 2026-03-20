@@ -305,9 +305,13 @@ BO_ 217 PTCAN_ACCELERATOR_CANDIDATE: 8 BMW_I3
  SG_ ACCEL_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACCEL_BYTE_0_PT_CAN : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ ACCEL_BYTE_1_PT_CAN : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ ACCELERATOR_WORD23_PT_CAN : 16|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ ACCELERATOR_VALUE_PT_CAN : 16|16@1+ (1,-4096) [0|4000] "" BMW_I3
  SG_ ACCELERATOR_I4_COMPAT_PT_CAN : 16|12@1+ (0.000244,0) [0|2047] "" BMW_I3
-CM_ BO_ 217 "Confirmed PT-CAN accelerator-family frame in current CarState, while still retaining raw helper signals for reverse work. The first 16 bits changed strongly during the two isolated accelerator presses and stayed comparatively stable elsewhere. Cross-check against smnogar BMW i4 SP2018 DBC showed that bits 16|12 also behave like an accelerator field on the i3 routes.";
+CM_ BO_ 217 "Confirmed PT-CAN accelerator-family frame. The first 16 bits remain useful as upstream positive/coast long-intent helper, while bytes 2:3 are now confirmed as the driver accelerator analog field on the i3. Current isolated pedal routes show 4096 at release and 8096 at full pedal, giving a clean 0..4000 working span after subtracting 4096.";
 CM_ SG_ 217 ACCEL_RAW_PT_CAN "Best current upstream positive/coast long-intent candidate. Cross-route fit against longitudinalPlan.aTarget on 147/148/170/176/177 shows this raw 16-bit field correlates materially better with positive/coast intent than downstream 59/54 words. Current pragmatic managed-mode medians: POS ~63334, COAST ~63364.";
+CM_ SG_ 217 ACCELERATOR_WORD23_PT_CAN "Confirmed raw accelerator word from bytes 2:3 on PT-CAN frame 217. Isolated pedal routes show release ~4096 and full pedal ~8096.";
+CM_ SG_ 217 ACCELERATOR_VALUE_PT_CAN "Confirmed driver accelerator analog value on PT-CAN frame 217, derived as bytes2:3 minus 4096. Practical observed range: 0 release to 4000 full pedal.";
 CM_ SG_ 217 ACCELERATOR_I4_COMPAT_PT_CAN "Legacy i4-compatible helper view of frame 217. Keep as comparison/support only; current i3 long fitting works better on the raw 16-bit field than on this compressed 12-bit projection.";
 
 BO_ 239 PTCAN_CRUISE_BUTTONS_AUX: 8 BMW_I3

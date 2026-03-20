@@ -324,7 +324,7 @@ BO_ 274 PTCAN_BLINKER_STATE_CANDIDATE: 8 BMW_I3
  SG_ BLINKER_STATE_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ BLINKER_STATE_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ BLINKER_STATE_BYTE_7 : 56|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 274 "Confirmed PT-CAN state frame used by current CarState for blinkers and seatbelt, while still exposing raw helper bytes for reverse work. Byte 6 is the strongest current discriminator for left/right indicator state on src 2. Byte 7 separates the current seatbelt attached/unattached candidate on the same frame.";
+CM_ BO_ 274 "Confirmed PT-CAN state helper used for raw blinker-family reverse work. Byte 6 remains useful as a left/right indicator-state discriminator on src 2, but recent parked seatbelt rechecks no longer support byte 7 as a reliable buckle source.";
 
 BO_ 481 PTCAN_DRIVER_DOOR_CANDIDATE: 6 BMW_I3
  SG_ DRIVER_DOOR_STATE_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3

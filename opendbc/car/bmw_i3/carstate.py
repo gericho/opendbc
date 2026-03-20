@@ -272,7 +272,6 @@ class CarState(CarStateBase):
     ret.cruiseState.standstill = ret.standstill
 
     blinker_byte6 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
-    blinker_byte7 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_7", 0))
     turn_left_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_LEFT_TURN_CANDIDATE", 0))
     turn_right_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_RIGHT_TURN_CANDIDATE", 0))
     turn_active_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_ACTIVE_CANDIDATE", 0))
@@ -285,10 +284,10 @@ class CarState(CarStateBase):
     turn_asserted = bool(turn_active_candidate) and not bool(turn_idle_candidate)
     ret.leftBlinker = turn_asserted and bool(turn_left_candidate) and not bool(turn_right_candidate)
     ret.rightBlinker = turn_asserted and bool(turn_right_candidate) and not bool(turn_left_candidate)
-    # Latest isolated parked seatbelt route shows:
-    #   0xA5 -> buckled
-    #   0xB5 -> unbuckled
-    ret.seatbeltUnlatched = blinker_byte7 == 0xB5
+    # Latest parked belt route and broader recent-route scans no longer support
+    # the old 274.byte7 heuristic. Keep seatbelt disabled until a dedicated
+    # signal is isolated cleanly instead of exposing a false event.
+    ret.seatbeltUnlatched = False
     ret.doorOpen = driver_door_state == 1
     ret.stockAeb = False
     ret.stockFcw = False

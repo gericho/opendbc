@@ -341,6 +341,10 @@ BO_ 502 PTCAN_TURNSIGNALS_CANDIDATE: 8 BMW_I3
  SG_ PTCAN_TURNSIGNAL_IDLE_CANDIDATE : 9|1@0+ (1,0) [0|1] "" BMW_I3
 CM_ BO_ 502 "Raw PT-CAN turn-signal helper aligned with the smnogar BMW KCAN DBC. This frame is present on recent i3 routes, but the current i3 parser still prefers frame 274 because it is more robust across the existing captures. Keep 502 as a raw comparison/helper source only for now.";
 
+BO_ 538 PTCAN_BRAKE_PEDAL_CANDIDATE: 3 BMW_I3
+ SG_ PTCAN_BRAKE_PEDAL_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 538 "Replicated parked brake route 000001a0 shows byte 0 tracking brake pedal cleanly on src 2: 0x00 released, 0x80 pressed. Recent parked seatbelt routes keep this byte at 0x00, making it a stronger brakePressed source than frame 796.";
+
 BO_ 663 PTCAN_SEATBELT_CANDIDATE_B: 7 BMW_I3
  SG_ PTCAN_SEATBELT_BYTE_2_B : 16|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 663 "Replicated parked seatbelt routes 0000019c and 0000019d show byte 2 tracking buckle state cleanly on src 2: 0xF1 latched, 0xF0 unlatched. Use together with frame 435 as a cross-check.";
@@ -360,7 +364,7 @@ BO_ 796 PTCAN_BRAKE_PRESSED_CANDIDATE: 8 BMW_I3
  SG_ BRAKE_PRESSED_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ BRAKE_PRESSED_BYTE_0_PT_CAN : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ BRAKE_PRESSED_BYTE_1_PT_CAN : 8|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 796 "Confirmed PT-CAN brakePressed-family frame in current CarState, while raw helper bytes are still kept for reverse work. Byte 1 separates idle (~0x20..0x2E) from brake application (~0x00..0x0E), making it the strongest current brakePressed source on CAN src 2.";
+CM_ BO_ 796 "PT-CAN brake/negative-intent helper frame. Byte 1 still separates long negative/coast families and remains useful for longitudinal reverse work, but recent isolated parked brake route 000001a0 shows it is not a reliable standalone brakePressed source.";
 CM_ SG_ 796 BRAKE_PRESSED_RAW_PT_CAN "Best current upstream negative/brake long-intent candidate on PT-CAN. Cross-route fit against longitudinalPlan.aTarget shows this frame separates negative intent more cleanly than downstream 54/59 words, especially when combined with byte1.";
 CM_ SG_ 796 BRAKE_PRESSED_BYTE_1_PT_CAN "Strongest current coarse negative/brake discriminator. Current pragmatic managed-mode negative bucket sits near byte1 ~13, while coast/positive windows stay near the idle range (~0x20..0x2E).";
 

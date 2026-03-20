@@ -182,6 +182,7 @@ class CarState(CarStateBase):
     self.stock_long_upstream_mode, self.stock_long_upstream_confidence = self._stock_long_upstream_hint(
       self.long_up_217_raw16, self.long_up_796_b1
     )
+    brake_pedal_candidate = int(cp_can.vl.get("PTCAN_BRAKE_PEDAL_CANDIDATE", {}).get("PTCAN_BRAKE_PEDAL_BYTE_0", 0))
 
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
@@ -208,7 +209,10 @@ class CarState(CarStateBase):
     gas_raw = self.long_up_217_i4_compat12
     ret.gasPressed = gas_raw > 200
 
-    ret.brakePressed = self.long_up_796_b1 < 0x10
+    # Replicated parked brake route 000001a0 isolates a cleaner brakePressed
+    # source than the old 796 heuristic:
+    #   538.byte0 = 0x00 released, 0x80 pressed
+    ret.brakePressed = brake_pedal_candidate == 0x80
 
     drive_state = cp_flexray.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
@@ -355,6 +359,7 @@ class CarState(CarStateBase):
     party_messages = [
       ("PTCAN_ACCELERATOR_CANDIDATE", float("nan")),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", float("nan")),
+      ("PTCAN_BRAKE_PEDAL_CANDIDATE", float("nan")),
       ("PTCAN_BLINKER_STATE_CANDIDATE", float("nan")),
       ("PTCAN_TURNSIGNALS_CANDIDATE", float("nan")),
       ("PTCAN_SEATBELT_CANDIDATE_A", float("nan")),

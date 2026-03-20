@@ -326,6 +326,10 @@ BO_ 274 PTCAN_BLINKER_STATE_CANDIDATE: 8 BMW_I3
  SG_ BLINKER_STATE_BYTE_7 : 56|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 274 "Confirmed PT-CAN state helper used for raw blinker-family reverse work. Byte 6 remains useful as a left/right indicator-state discriminator on src 2, but recent parked seatbelt rechecks no longer support byte 7 as a reliable buckle source.";
 
+BO_ 435 PTCAN_SEATBELT_CANDIDATE_A: 8 BMW_I3
+ SG_ PTCAN_SEATBELT_BYTE_4_A : 32|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 435 "Replicated parked seatbelt routes 0000019c and 0000019d show byte 4 tracking buckle state cleanly on src 2: 0x00 latched, 0x04 unlatched. Use together with frame 663 as a cross-check.";
+
 BO_ 481 PTCAN_DRIVER_DOOR_CANDIDATE: 6 BMW_I3
  SG_ DRIVER_DOOR_STATE_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 481 "Confirmed PT-CAN driver-door frame in current CarState. Latest isolated parked door route and the previous two-open-close route both show byte 2 toggling cleanly between 0 (closed) and 1 (open) on src 2.";
@@ -336,6 +340,10 @@ BO_ 502 PTCAN_TURNSIGNALS_CANDIDATE: 8 BMW_I3
  SG_ PTCAN_TURNSIGNAL_ACTIVE_CANDIDATE : 8|1@0+ (1,0) [0|1] "" BMW_I3
  SG_ PTCAN_TURNSIGNAL_IDLE_CANDIDATE : 9|1@0+ (1,0) [0|1] "" BMW_I3
 CM_ BO_ 502 "Raw PT-CAN turn-signal helper aligned with the smnogar BMW KCAN DBC. This frame is present on recent i3 routes, but the current i3 parser still prefers frame 274 because it is more robust across the existing captures. Keep 502 as a raw comparison/helper source only for now.";
+
+BO_ 663 PTCAN_SEATBELT_CANDIDATE_B: 7 BMW_I3
+ SG_ PTCAN_SEATBELT_BYTE_2_B : 16|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 663 "Replicated parked seatbelt routes 0000019c and 0000019d show byte 2 tracking buckle state cleanly on src 2: 0xF1 latched, 0xF0 unlatched. Use together with frame 435 as a cross-check.";
 
 BO_ 415 PTCAN_CRUISE_BUTTONS_MAIN: 8 BMW_I3
  SG_ CRUISE_BTN_MAIN_PT_CAN : 16|16@1+ (1,0) [0|65535] "" BMW_I3

@@ -278,16 +278,22 @@ class CarState(CarStateBase):
     turn_idle_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_IDLE_CANDIDATE", 0))
     main_cruise_word = int(cp_can.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
     driver_door_state = int(cp_can.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
+    seatbelt_a = int(cp_can.vl.get("PTCAN_SEATBELT_CANDIDATE_A", {}).get("PTCAN_SEATBELT_BYTE_4_A", 0))
+    seatbelt_b = int(cp_can.vl.get("PTCAN_SEATBELT_CANDIDATE_B", {}).get("PTCAN_SEATBELT_BYTE_2_B", 0))
     # Prefer the dedicated PT-CAN turn-signal helper frame over the noisier byte-family
     # reverse from 274. The bit layout is already described in the custom DBC and gives
     # us explicit left/right/active/idle candidates.
     turn_asserted = bool(turn_active_candidate) and not bool(turn_idle_candidate)
     ret.leftBlinker = turn_asserted and bool(turn_left_candidate) and not bool(turn_right_candidate)
     ret.rightBlinker = turn_asserted and bool(turn_right_candidate) and not bool(turn_left_candidate)
-    # Latest parked belt route and broader recent-route scans no longer support
-    # the old 274.byte7 heuristic. Keep seatbelt disabled until a dedicated
-    # signal is isolated cleanly instead of exposing a false event.
-    ret.seatbeltUnlatched = False
+    # Replicated parked belt routes 0000019c/0000019d isolate two agreeing PT-CAN
+    # helpers for the buckle state:
+    #   435.byte4 : 0x00 latched, 0x04 unlatched
+    #   663.byte2 : 0xF1 latched, 0xF0 unlatched
+    # Require agreement instead of trusting a single raw frame.
+    seatbelt_unlatched = (seatbelt_a == 0x04 and seatbelt_b == 0xF0)
+    seatbelt_latched = (seatbelt_a == 0x00 and seatbelt_b == 0xF1)
+    ret.seatbeltUnlatched = seatbelt_unlatched and not seatbelt_latched
     ret.doorOpen = driver_door_state == 1
     ret.stockAeb = False
     ret.stockFcw = False
@@ -351,6 +357,8 @@ class CarState(CarStateBase):
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", float("nan")),
       ("PTCAN_BLINKER_STATE_CANDIDATE", float("nan")),
       ("PTCAN_TURNSIGNALS_CANDIDATE", float("nan")),
+      ("PTCAN_SEATBELT_CANDIDATE_A", float("nan")),
+      ("PTCAN_SEATBELT_CANDIDATE_B", float("nan")),
       ("PTCAN_CRUISE_BUTTONS_MAIN", float("nan")),
       ("PTCAN_DRIVER_DOOR_CANDIDATE", float("nan")),
     ]

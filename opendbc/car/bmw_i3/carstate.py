@@ -155,8 +155,7 @@ class CarState(CarStateBase):
     ret.steeringPressed = abs(ret.steeringTorque) > 1.5
 
     ret.yawRate = float(cp_flexray.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
-    # No physical brake-pressure value is closed yet. Keep brake at zero and use
-    # brakePressed from PT-CAN 796 for the boolean path.
+    # No physical brake-pressure value is closed yet.
     ret.brake = 0.0
 
     # Best current stock longitudinal helper branches:
@@ -186,8 +185,6 @@ class CarState(CarStateBase):
     self.stock_long_upstream_mode, self.stock_long_upstream_confidence = self._stock_long_upstream_hint(
       self.long_up_217_raw16, self.long_up_796_b1
     )
-    brake_pedal_candidate = int(cp_can.vl.get("PTCAN_BRAKE_PEDAL_CANDIDATE", {}).get("PTCAN_BRAKE_PEDAL_BYTE_0", 0))
-
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
@@ -213,10 +210,11 @@ class CarState(CarStateBase):
     ret.gas = self.long_up_217_value / 4000.0
     ret.gasPressed = self.long_up_217_value > 0
 
-    # Replicated parked brake route 000001a0 isolates a cleaner brakePressed
-    # source than the old 796 heuristic:
-    #   538.byte0 = 0x00 released, 0x80 pressed
-    ret.brakePressed = brake_pedal_candidate == 0x80
+    # brakePressed is intentionally left disabled until we separate true pedal
+    # input from stop-lamp / regen / hold side effects. Recent isolated brake
+    # and gas routes show frame 538 moves during gas activity as well, so it is
+    # not a safe pedal boolean yet.
+    ret.brakePressed = False
 
     drive_state = cp_flexray.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))

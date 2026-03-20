@@ -347,7 +347,7 @@ CM_ BO_ 502 "Raw PT-CAN turn-signal helper aligned with the smnogar BMW KCAN DBC
 
 BO_ 538 PTCAN_BRAKE_PEDAL_CANDIDATE: 3 BMW_I3
  SG_ PTCAN_BRAKE_PEDAL_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 538 "Replicated parked brake route 000001a0 shows byte 0 tracking brake pedal cleanly on src 2: 0x00 released, 0x80 pressed. Recent parked seatbelt routes keep this byte at 0x00, making it a stronger brakePressed source than frame 796.";
+CM_ BO_ 538 "PT-CAN decel / stop-lamp / brake-related helper candidate. Isolated parked brake route 000001a0 showed byte0 toggling between 0x00 and 0x80, but later isolated gas route 000001a1 also moved this byte. Do not treat it as a true brake pedal boolean until pedal input is separated from regen / stop-lamp / hold behavior.";
 
 BO_ 663 PTCAN_SEATBELT_CANDIDATE_B: 7 BMW_I3
  SG_ PTCAN_SEATBELT_BYTE_2_B : 16|8@1+ (1,0) [0|255] "" BMW_I3

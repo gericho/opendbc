@@ -10,13 +10,14 @@ ButtonType = structs.CarState.ButtonEvent.Type
 class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
+  ENABLE_LONG_CONTROL = False
 
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, experimental_long, is_release, docs):
     ret.brand = "bmw"
     ret.dashcamOnly = False
     ret.radarUnavailable = True
-    ret.openpilotLongitudinalControl = False
+    ret.openpilotLongitudinalControl = bool(CarInterface.ENABLE_LONG_CONTROL)
     ret.pcmCruise = True
     ret.steerControlType = structs.CarParams.SteerControlType.angle
     ret.autoResumeSng = False

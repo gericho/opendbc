@@ -9,6 +9,7 @@ from opendbc.car.bmw.values import CarControllerParams
 
 
 class CarController(CarControllerBase):
+  ENABLE_LONG_TX_BUILDER = False
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -31,6 +32,7 @@ class CarController(CarControllerBase):
     self.last_shadow_acc_values = None
     self.last_shadow_acc_bytes = b""
     self.last_shadow_long_debug = None
+    self.enable_long_tx_builder = bool(self.ENABLE_LONG_TX_BUILDER and CP.openpilotLongitudinalControl)
 
   def _next_shadow_cnt(self) -> int:
     self.shadow_cnt = (self.shadow_cnt + 1) % 16
@@ -61,19 +63,102 @@ class CarController(CarControllerBase):
     reserve = 0xA0 - int(min(0x30, abs(driver_torque) * 4.0))
     return max(0x70, min(0xA0, reserve))
 
-  def _shadow_long_tx_hint(self, desired_accel: float) -> dict[str, int | str]:
-    # Best current offline fit from the existing ACC routes:
-    #   59 = positive/coast branch, mainly active on even subcycles
-    #   54 = negative/brake-blend branch, mainly active on odd subcycles
-    # This is not a closed payload mapping yet; it is a conservative replay
-    # hint so the next live comparison uses the right branch family.
-    if desired_accel < -0.05:
+  def _shadow_long_helper_state(self, CS) -> str:
+    # Raw FlexRay helpers 55/56/63/93 are now the best offline discriminants
+    # for the longitudinal frame families. Keep the live classifier explicit and
+    # conservative until the final TX mapping is enabled.
+    if int(getattr(CS, "stock_acc_ctrl_state", 0)) == 24802:
+      if int(getattr(CS, "long_54_wb", 0)) or int(getattr(CS, "long_54_wc", 0)):
+        return "MANAGED_BRAKE_BLEND"
+      if int(getattr(CS, "long_59_wb", 0)) or int(getattr(CS, "long_59_wc", 0)):
+        return "MANAGED_POWERTRAIN"
+    if int(getattr(CS, "stock_acc_ctrl_state", 0)) == 16610:
+      return "ACC_ARMED"
+    if int(getattr(CS, "stock_acc_ctrl_gate", 0)) in (640, 656, 3584):
+      return "ACC_GATE_ONLY"
+    return "OFF"
+
+  @staticmethod
+  def _build_long_frame_core(phase: int, word_b: int, word_c: int, fill: int = 0xFF) -> bytes:
+    # Candidate stock-like envelope for the longitudinal frames. We now know the
+    # live phase byte and the active B/C words reliably; unknown bytes stay on a
+    # conservative stock-like filler until the final TX envelope is fully closed.
+    payload = bytearray([fill] * 17)
+    payload[0] = phase & 0xFF
+    payload[1] = 0x00
+    payload[2] = 0x00
+    payload[3] = word_b & 0xFF
+    payload[4] = (word_b >> 8) & 0xFF
+    payload[5] = word_c & 0xFF
+    payload[6] = (word_c >> 8) & 0xFF
+    return bytes(payload)
+
+  def _build_shadow_long_tx(self, CS, long_tx_hint: dict[str, int | str]) -> dict[str, int | str]:
+    tx54_phase = int(getattr(CS, "long_54_phase", 0))
+    tx59_phase = int(getattr(CS, "long_59_phase", 0))
+    tx54_wb = int(long_tx_hint["tx_target_wb"]) if int(long_tx_hint["tx_branch"]) == 54 else int(getattr(CS, "long_54_wb", 0))
+    tx54_wc = int(long_tx_hint["tx_target_wc"]) if int(long_tx_hint["tx_branch"]) == 54 else int(getattr(CS, "long_54_wc", 0))
+    tx59_wb = int(long_tx_hint["tx_target_wb"]) if int(long_tx_hint["tx_branch"]) == 59 else int(getattr(CS, "long_59_wb", 0))
+    tx59_wc = int(long_tx_hint["tx_target_wc"]) if int(long_tx_hint["tx_branch"]) == 59 else int(getattr(CS, "long_59_wc", 0))
+    tx54 = bytearray(self._build_long_frame_core(tx54_phase, tx54_wb, tx54_wc))
+    tx59 = bytearray(self._build_long_frame_core(tx59_phase, tx59_wb, tx59_wc))
+    # Overwrite byte-local fields with the live stock bytes we already parse.
+    tx54[4] = int(getattr(CS, "long_54_b4", 0)) & 0xFF
+    tx54[6] = int(getattr(CS, "long_54_b6", 0)) & 0xFF
+    tx59[3] = int(getattr(CS, "long_59_b3", 0)) & 0xFF
+    tx59[5] = int(getattr(CS, "long_59_b5", 0)) & 0xFF
+    return {
+      "tx54_phase": tx54_phase,
+      "tx54_core_hex": bytes(tx54).hex(),
+      "tx59_phase": tx59_phase,
+      "tx59_core_hex": bytes(tx59).hex(),
+    }
+
+  def _build_long_can_msgs(self, CS, long_tx_hint: dict[str, int | str], long_tx_core: dict[str, int | str]) -> list[tuple[int, bytes, int]]:
+    if not self.enable_long_tx_builder:
+      return []
+    msgs = []
+    branch = int(long_tx_hint["tx_branch"])
+    if branch == 54:
+      msgs.append((54, bytes.fromhex(str(long_tx_core["tx54_core_hex"])), 1))
+      tx59_live = self._build_long_frame_core(int(getattr(CS, "long_59_phase", 0)), int(getattr(CS, "long_59_wb", 0)), int(getattr(CS, "long_59_wc", 0)))
+      msgs.append((59, tx59_live, 1))
+    else:
+      msgs.append((59, bytes.fromhex(str(long_tx_core["tx59_core_hex"])), 1))
+      tx54_live = self._build_long_frame_core(int(getattr(CS, "long_54_phase", 0)), int(getattr(CS, "long_54_wb", 0)), int(getattr(CS, "long_54_wc", 0)))
+      msgs.append((54, tx54_live, 1))
+    return msgs
+
+  def _shadow_long_tx_hint(self, desired_accel: float, CS) -> dict[str, int | str]:
+    # Prefer live stock words when they exist: the raw helper work showed that
+    # exact family selection is upstream-state driven, not a simple desired-accel
+    # heuristic. Keep desired_accel only as a weak fallback sign hint.
+    helper_state = self._shadow_long_helper_state(CS)
+    neg_hint = desired_accel < -0.05 or bool(CS.out.brakePressed) or getattr(CS, "stock_long_upstream_mode", "unknown") == "negative"
+    live_54_wb = int(getattr(CS, "long_54_wb", 0))
+    live_54_wc = int(getattr(CS, "long_54_wc", 0))
+    live_59_wb = int(getattr(CS, "long_59_wb", 0))
+    live_59_wc = int(getattr(CS, "long_59_wc", 0))
+
+    if (helper_state == "MANAGED_BRAKE_BLEND" or neg_hint) and (live_54_wb or live_54_wc):
       return {
         "tx_mode": "negative",
         "tx_branch": 54,
         "tx_parity": self.LONG_54_ACTIVE_PARITY,
-        "tx_target_wb": self.LONG_54_CENTER_WB,
-        "tx_target_wc": self.LONG_54_CENTER_WC,
+        "tx_target_wb": live_54_wb,
+        "tx_target_wc": live_54_wc,
+        "tx_source": "stock_live_54",
+        "tx_helper_state": helper_state,
+      }
+    if live_59_wb or live_59_wc:
+      return {
+        "tx_mode": "positive_or_coast",
+        "tx_branch": 59,
+        "tx_parity": self.LONG_59_ACTIVE_PARITY,
+        "tx_target_wb": live_59_wb,
+        "tx_target_wc": live_59_wc,
+        "tx_source": "stock_live_59",
+        "tx_helper_state": helper_state,
       }
     return {
       "tx_mode": "positive_or_coast",
@@ -81,6 +166,8 @@ class CarController(CarControllerBase):
       "tx_parity": self.LONG_59_ACTIVE_PARITY,
       "tx_target_wb": self.LONG_59_CENTER_WB,
       "tx_target_wc": self.LONG_59_CENTER_WC,
+      "tx_source": "center_fallback",
+      "tx_helper_state": helper_state,
     }
 
   def _shadow_force_weaken(self, v_ego: float) -> int:
@@ -143,7 +230,9 @@ class CarController(CarControllerBase):
         self.last_shadow_acc_bytes = bytes(payload)
 
     desired_accel = float(actuators.accel)
-    long_tx_hint = self._shadow_long_tx_hint(desired_accel)
+    long_tx_hint = self._shadow_long_tx_hint(desired_accel, CS)
+    long_tx_core = self._build_shadow_long_tx(CS, long_tx_hint)
+    long_can_msgs = self._build_long_can_msgs(CS, long_tx_hint, long_tx_core)
     self.last_shadow_long_debug = {
       "desired_accel": desired_accel,
       "long_active": bool(CC.longActive),
@@ -159,9 +248,11 @@ class CarController(CarControllerBase):
       # 59 = best current stock powertrain-intent proxy
       "long_59_wb": int(getattr(CS, "long_59_wb", 0)),
       "long_59_wc": int(getattr(CS, "long_59_wc", 0)),
+      "long_59_phase": int(getattr(CS, "long_59_phase", 0)),
       "long_59_b3": int(getattr(CS, "long_59_b3", 0)),
       "long_59_b5": int(getattr(CS, "long_59_b5", 0)),
       # 54 = best current stock brake-blend / regen proxy
+      "long_54_phase": int(getattr(CS, "long_54_phase", 0)),
       "long_54_wb": int(getattr(CS, "long_54_wb", 0)),
       "long_54_wc": int(getattr(CS, "long_54_wc", 0)),
       "long_54_b4": int(getattr(CS, "long_54_b4", 0)),
@@ -173,6 +264,7 @@ class CarController(CarControllerBase):
       "long_up_796_b1": int(getattr(CS, "long_up_796_b1", 0)),
       "stock_long_upstream_mode": str(getattr(CS, "stock_long_upstream_mode", "unknown")),
       "stock_long_upstream_confidence": str(getattr(CS, "stock_long_upstream_confidence", "none")),
+      "stock_long_helper_state": self._shadow_long_helper_state(CS),
       "long_helper_46_wa": int(getattr(CS, "long_helper_46_wa", 0)),
       "long_helper_46_wb": int(getattr(CS, "long_helper_46_wb", 0)),
       "long_helper_46_wc": int(getattr(CS, "long_helper_46_wc", 0)),
@@ -197,8 +289,13 @@ class CarController(CarControllerBase):
       "long_helper_93_wb": int(getattr(CS, "long_helper_93_wb", 0)),
       "long_helper_93_wc": int(getattr(CS, "long_helper_93_wc", 0)),
       "long_helper_93_wd": int(getattr(CS, "long_helper_93_wd", 0)),
+      "long_tx_builder_enabled": self.enable_long_tx_builder,
+      "long_tx_builder_msg_count": len(long_can_msgs),
+      **long_tx_core,
       **long_tx_hint,
     }
     self.frame += 1
-    # Read-only shadow mode: build the logical frame shape, but do not send.
-    return actuators.as_builder(), []
+    # Send path exists but stays disabled by default until the TX envelope is
+    # fully validated. When enabled, we still keep the builder conservative and
+    # branch-selective.
+    return actuators.as_builder(), long_can_msgs

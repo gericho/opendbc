@@ -141,6 +141,32 @@ class CarController(CarControllerBase):
         values["crc1"] = payload[1]
         self.last_shadow_acc_values = values
         self.last_shadow_acc_bytes = bytes(payload)
+        if self.frame % 50 == 0:
+          carlog.warning({
+            "event": "bmw_i3_shadow_acc",
+            "angle_deg": round(desired_angle, 3),
+            "cycle_count": cycle_count,
+            "cnt1": cnt1,
+            "crc1": values["crc1"],
+            "assist_mode": values["assist_mode"],
+            "tja_ready": tja_ready,
+            "driver_override": driver_override,
+            "lat_triggered": lat_triggered,
+            "steering_engaged": steering_engaged,
+            "stock_lat96_phase": int(getattr(CS, "stock_lat96_phase", 0)),
+            "stock_lat96_b1": int(getattr(CS, "stock_lat96_b1", 0)),
+            "stock_lat112_b5": int(getattr(CS, "stock_lat112_b5", 0)),
+            "stock_lat116_b5": int(getattr(CS, "stock_lat116_b5", 0)),
+            "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
+            "stock_lat_dir_hint": str(getattr(CS, "stock_lat_dir_hint", "unknown")),
+            "stock_lat_dir_confidence": str(getattr(CS, "stock_lat_dir_confidence", "none")),
+            "stock_lat_mag_hint": round(float(getattr(CS, "stock_lat_mag_hint", 0.0)), 4),
+            "stock_lat_mag_confidence": str(getattr(CS, "stock_lat_mag_confidence", "none")),
+            "steer_torque_req": round(steer_torque_req, 3),
+            "torque_reserve": torque_reserve,
+            "force_weaken": force_weaken,
+            "payload": self.last_shadow_acc_bytes.hex(),
+          })
 
     desired_accel = float(actuators.accel)
     long_tx_hint = self._shadow_long_tx_hint(desired_accel)

@@ -9,7 +9,8 @@ from opendbc.car.bmw.values import CarControllerParams
 
 
 class CarController(CarControllerBase):
-  ENABLE_LONG_TX_BUILDER = False
+  ENABLE_LONG_TX_BUILDER = True
+  ENABLE_LATERAL_TX_BUILDER = False
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -33,6 +34,7 @@ class CarController(CarControllerBase):
     self.last_shadow_acc_bytes = b""
     self.last_shadow_long_debug = None
     self.enable_long_tx_builder = bool(self.ENABLE_LONG_TX_BUILDER and CP.openpilotLongitudinalControl)
+    self.enable_lateral_tx_builder = bool(self.ENABLE_LATERAL_TX_BUILDER)
 
   def _next_shadow_cnt(self) -> int:
     self.shadow_cnt = (self.shadow_cnt + 1) % 16
@@ -170,6 +172,56 @@ class CarController(CarControllerBase):
       "tx_helper_state": helper_state,
     }
 
+  @staticmethod
+  def _build_lateral_frame72(phase: int, cnt: int, byte8: int = 0xE0) -> bytes:
+    payload = bytearray([0] * 17)
+    payload[0] = phase & 0xFF
+    payload[2] = (0xF << 4) | (cnt & 0xF)
+    payload[8] = byte8 & 0xFF
+    return bytes(payload)
+
+  @staticmethod
+  def _build_lateral_frame96(phase: int, b1: int, b2: int, b3: int, b4: int = 0, b8: int = 0) -> bytes:
+    payload = bytearray([0] * 9)
+    payload[0] = phase & 0xFF
+    payload[1] = b1 & 0xFF
+    payload[2] = b2 & 0xFF
+    payload[3] = b3 & 0xFF
+    payload[4] = b4 & 0xFF
+    payload[8] = b8 & 0xFF
+    return bytes(payload)
+
+  def _build_shadow_lateral_tx(self, CC, CS):
+    phase = int(getattr(CS, "stock_lat96_phase", 0))
+    cnt = self.shadow_cnt & 0xF
+    dir_hint = str(getattr(CS, "stock_lat_dir_hint", "unknown"))
+    mag = float(getattr(CS, "stock_lat_mag_hint", 0.0))
+    b1 = int(getattr(CS, "stock_lat96_b1", 0))
+    b2 = int(getattr(CS, "stock_lat96_b2", 0))
+    b3 = int(getattr(CS, "stock_lat96_b3", 0))
+    if CC.latActive and dir_hint != "unknown":
+      delta = int(round(24.0 * mag))
+      b1 = min(255, b1 + delta) if dir_hint == "right" else max(0, b1 - delta)
+    tx72 = self._build_lateral_frame72(phase, cnt)
+    tx96 = self._build_lateral_frame96(phase, b1, b2, b3)
+    return {
+      "lat_phase": phase,
+      "lat_dir_hint": dir_hint,
+      "lat_mag_hint": mag,
+      "lat_tx_enabled": self.enable_lateral_tx_builder,
+      "lat_tx_msg_count": 2 if self.enable_lateral_tx_builder and CC.latActive else 0,
+      "tx72_hex": tx72.hex(),
+      "tx96_hex": tx96.hex(),
+    }
+
+  def _build_lateral_can_msgs(self, CC, lateral_tx):
+    if not (self.enable_lateral_tx_builder and CC.latActive):
+      return []
+    return [
+      (72, bytes.fromhex(str(lateral_tx["tx72_hex"])), 0),
+      (96, bytes.fromhex(str(lateral_tx["tx96_hex"])), 0),
+    ]
+
   def _shadow_force_weaken(self, v_ego: float) -> int:
     # Mirror the smnogar BMW lateral method explicitly. Their current i4 fit
     # keeps the weaken field at a stock-like 250 over the validated speed band;
@@ -185,6 +237,7 @@ class CarController(CarControllerBase):
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
 
+    desired_angle = self.apply_angle_last
     if CC.latActive:
       desired_angle = float(actuators.steeringAngleDeg)
       desired_angle = apply_steer_angle_limits_vm(desired_angle, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
@@ -229,6 +282,8 @@ class CarController(CarControllerBase):
         self.last_shadow_acc_values = values
         self.last_shadow_acc_bytes = bytes(payload)
 
+    lateral_tx = self._build_shadow_lateral_tx(CC, CS)
+    lateral_can_msgs = self._build_lateral_can_msgs(CC, lateral_tx)
     desired_accel = float(actuators.accel)
     long_tx_hint = self._shadow_long_tx_hint(desired_accel, CS)
     long_tx_core = self._build_shadow_long_tx(CS, long_tx_hint)
@@ -293,9 +348,14 @@ class CarController(CarControllerBase):
       "long_tx_builder_msg_count": len(long_can_msgs),
       **long_tx_core,
       **long_tx_hint,
+      **lateral_tx,
+      "desired_angle": float(desired_angle),
+      "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
+      "stock_lat96_b1": int(getattr(CS, "stock_lat96_b1", 0)),
+      "stock_lat96_b2": int(getattr(CS, "stock_lat96_b2", 0)),
+      "stock_lat96_b3": int(getattr(CS, "stock_lat96_b3", 0)),
+      "stock_lat112_b5": int(getattr(CS, "stock_lat112_b5", 0)),
+      "stock_lat116_b5": int(getattr(CS, "stock_lat116_b5", 0)),
     }
     self.frame += 1
-    # Send path exists but stays disabled by default until the TX envelope is
-    # fully validated. When enabled, we still keep the builder conservative and
-    # branch-selective.
-    return actuators.as_builder(), long_can_msgs
+    return actuators.as_builder(), long_can_msgs + lateral_can_msgs

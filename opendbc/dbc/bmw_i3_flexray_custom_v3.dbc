@@ -37,6 +37,10 @@ BU_: BMW_I3
 CM_ "Draft DBC derived from BMW i3 FlexRay and PT-CAN logs. Address 27 was not observed in any uploaded segment. Signals below intentionally mix three classes: confirmed parse signals already used by CarState, state/proxy helpers useful for reverse engineering, and unresolved TX candidates kept for shadow-debug correlation.";
 
 BO_ 46 WHEEL_SPEED: 17 BMW_I3
+ SG_ WHEEL_SPEED_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ WHEEL_SPEED_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ WHEEL_SPEED_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ WHEEL_SPEED_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ RL_SPEED_RAW : 24|16@1+ (0.015625,-511.984375) [0|65535] "kph" BMW_I3
  SG_ RR_SPEED_RAW : 40|16@1+ (0.015625,-511.984375) [0|65535] "kph" BMW_I3
  SG_ FL_SPEED_RAW : 56|16@1+ (0.015625,-511.984375) [0|65535] "kph" BMW_I3
@@ -45,6 +49,10 @@ BO_ 46 WHEEL_SPEED: 17 BMW_I3
 
 BO_ 49 STEER_TORQUE: 17 BMW_I3
  SG_ STEER_TORQUE_CYCLE_RAW : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ STEER_TORQUE_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ STEER_TORQUE_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ STEER_TORQUE_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ STEER_TORQUE_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ DRIVER_STEER_TORQUE_BMW : 24|12@1+ (0.005,-10) [-10|10.475] "Nm" BMW_I3
  SG_ STEER_TORQUE_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ BO_ 49 "Confirmed steering-torque helper. BMW-style driver torque lives in the 24|12 field and is valid on the cycle-0 subframe. CarState uses this path for steeringTorque/steeringPressed.";
@@ -56,12 +64,20 @@ CM_ BO_ 51 "Confirmed EPS-angle helper. Live i3 routes show this frame behaving 
 
 BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
  SG_ VEHICLE_SPEED_CYCLE_RAW M : 0|2@1+ (1,0) [0|3] "" BMW_I3
+ SG_ VEHICLE_SPEED_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ VEHICLE_SPEED_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ VEHICLE_SPEED_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ VEHICLE_SPEED_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ LONG_ACCEL_RAW m0 : 24|16@1+ (0.002,-65) [0|65535] "" BMW_I3
  SG_ VEHICLE_SPEED_BMW m3 : 24|16@1+ (0.015625,0) [0|65535] "kph" BMW_I3
  SG_ DRIVING_STATUS_BMW m3 : 44|2@1+ (1,0) [0|7] "" BMW_I3
  CM_ BO_ 55 "Confirmed primary vehicle-speed source aligned with the BMW SP2018 multiplexed layout. CarState now consumes the m3 vehicle-speed subframe and keeps frame 46 only as fallback/support.";
 
 BO_ 56 DYNAMICS_YAW_PROV: 17 BMW_I3
+ SG_ DYNAMICS_YAW_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ DYNAMICS_YAW_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ DYNAMICS_YAW_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ DYNAMICS_YAW_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ YAW_RATE_RAW_A : 8|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
  SG_ YAW_RATE_RAW_B : 24|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
  CM_ BO_ 56 "Confirmed vehicle-dynamics helper. Raw yaw fields are used for reverse-engineering correlation, especially while comparing stock lateral behavior against shadow steering logic.";
@@ -136,8 +152,19 @@ BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ SG_ 43 CHASSIS_STATE_A "Experimental secondary dynamic-state frame. It follows longitudinal phase changes across 00000054/55/b3, but is still weaker than 59 and 54 for isolating stock ACC content.";
 
+BO_ 63 LONG_STATE_HELPER_D: 17 BMW_I3
+ SG_ LONG_STATE_HELPER_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_STATE_HELPER_D_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_STATE_HELPER_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_STATE_HELPER_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ CM_ BO_ 63 "Raw helper added after route 000003d0 showed src1/63 as one of the strongest discriminants for stock longitudinal frame families 54/59. Keep read-only for state-machine closure; do not treat as a direct accel command.";
+
 BO_ 93 ACC_TJA_OLD_ROUTE_HELPER_A: 17 BMW_I3
  SG_ ACC_TJA_OLD_A_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LONG_STATE_HELPER_A_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_STATE_HELPER_A_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_STATE_HELPER_A_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_STATE_HELPER_A_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3

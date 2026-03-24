@@ -57,6 +57,30 @@ class CarState(CarStateBase):
     self.brake_239_word56 = 32000
     self.stock_long_upstream_mode = "unknown"
     self.stock_long_upstream_confidence = "none"
+    self.long_helper_46_wa = 0
+    self.long_helper_46_wb = 0
+    self.long_helper_46_wc = 0
+    self.long_helper_46_wd = 0
+    self.long_helper_49_wa = 0
+    self.long_helper_49_wb = 0
+    self.long_helper_49_wc = 0
+    self.long_helper_49_wd = 0
+    self.long_helper_55_wa = 0
+    self.long_helper_55_wb = 0
+    self.long_helper_55_wc = 0
+    self.long_helper_55_wd = 0
+    self.long_helper_56_wa = 0
+    self.long_helper_56_wb = 0
+    self.long_helper_56_wc = 0
+    self.long_helper_56_wd = 0
+    self.long_helper_63_wa = 0
+    self.long_helper_63_wb = 0
+    self.long_helper_63_wc = 0
+    self.long_helper_63_wd = 0
+    self.long_helper_93_wa = 0
+    self.long_helper_93_wb = 0
+    self.long_helper_93_wc = 0
+    self.long_helper_93_wd = 0
     self.driver_steer_torque = 0.0
     self.vehicle_speed_kph = 0.0
     self.stock_lat96_phase = 0
@@ -128,6 +152,10 @@ class CarState(CarStateBase):
     ret_sp = structs.CarStateSP()
 
     ws = cp_flexray.vl.get("WHEEL_SPEED", {})
+    self.long_helper_46_wa = int(ws.get("WHEEL_SPEED_RAW_WORD_A", 0))
+    self.long_helper_46_wb = int(ws.get("WHEEL_SPEED_RAW_WORD_B", 0))
+    self.long_helper_46_wc = int(ws.get("WHEEL_SPEED_RAW_WORD_C", 0))
+    self.long_helper_46_wd = int(ws.get("WHEEL_SPEED_RAW_WORD_D", 0))
     ret.wheelSpeeds = WheelSpeeds(fl=float(ws.get("FL_SPEED_RAW", 0.0)) / 3.6,
                                   fr=float(ws.get("FR_SPEED_RAW", 0.0)) / 3.6,
                                   rl=float(ws.get("RL_SPEED_RAW", 0.0)) / 3.6,
@@ -139,6 +167,10 @@ class CarState(CarStateBase):
     # from the valid m3 subframe of frame 55, and keep frame 46 wheel speeds as
     # fallback / consistency support.
     vehicle_speed = cp_flexray.vl.get("VEHICLE_SPEED_PROV", {})
+    self.long_helper_55_wa = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_A", 0))
+    self.long_helper_55_wb = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_B", 0))
+    self.long_helper_55_wc = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_C", 0))
+    self.long_helper_55_wd = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_D", 0))
     vehicle_speed_cycle = int(vehicle_speed.get("VEHICLE_SPEED_CYCLE_RAW", -1))
     if vehicle_speed_cycle == 3:
       self.vehicle_speed_kph = float(vehicle_speed.get("VEHICLE_SPEED_BMW", self.vehicle_speed_kph))
@@ -150,13 +182,22 @@ class CarState(CarStateBase):
     eps_angle_raw = float(cp_flexray.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
     ret.steeringAngleDeg = self._decode_eps_angle(eps_angle_raw)
     steer_torque = cp_flexray.vl.get("STEER_TORQUE", {})
+    self.long_helper_49_wa = int(steer_torque.get("STEER_TORQUE_RAW_WORD_A", 0))
+    self.long_helper_49_wb = int(steer_torque.get("STEER_TORQUE_RAW_WORD_B", 0))
+    self.long_helper_49_wc = int(steer_torque.get("STEER_TORQUE_RAW_WORD_C", 0))
+    self.long_helper_49_wd = int(steer_torque.get("STEER_TORQUE_RAW_WORD_D", 0))
     steer_torque_cycle = int(steer_torque.get("STEER_TORQUE_CYCLE_RAW", -1))
     if steer_torque_cycle == 0:
       self.driver_steer_torque = float(steer_torque.get("DRIVER_STEER_TORQUE_BMW", self.driver_steer_torque))
     ret.steeringTorque = self.driver_steer_torque
     ret.steeringPressed = abs(ret.steeringTorque) > 1.5
 
-    ret.yawRate = float(cp_flexray.vl.get("DYNAMICS_YAW_PROV", {}).get("YAW_RATE_RAW_A", 0.0))
+    dynamics_yaw = cp_flexray.vl.get("DYNAMICS_YAW_PROV", {})
+    self.long_helper_56_wa = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_A", 0))
+    self.long_helper_56_wb = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_B", 0))
+    self.long_helper_56_wc = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_C", 0))
+    self.long_helper_56_wd = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_D", 0))
+    ret.yawRate = float(dynamics_yaw.get("YAW_RATE_RAW_A", 0.0))
     # No physical brake-pressure value is closed yet.
     ret.brake = 0.0
 
@@ -191,6 +232,18 @@ class CarState(CarStateBase):
     self.stock_long_upstream_mode, self.stock_long_upstream_confidence = self._stock_long_upstream_hint(
       self.long_up_217_raw16, self.long_up_796_b1
     )
+    long63 = cp_flexray.vl.get("LONG_STATE_HELPER_D", {})
+    self.long_helper_63_wa = int(long63.get("LONG_STATE_HELPER_D_WORD_A", 0))
+    self.long_helper_63_wb = int(long63.get("LONG_STATE_HELPER_D_WORD_B", 0))
+    self.long_helper_63_wc = int(long63.get("LONG_STATE_HELPER_D_WORD_C", 0))
+    self.long_helper_63_wd = int(long63.get("LONG_STATE_HELPER_D_WORD_D", 0))
+
+    long93 = cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_A", {})
+    self.long_helper_93_wa = int(long93.get("LONG_STATE_HELPER_A_WORD_A", 0))
+    self.long_helper_93_wb = int(long93.get("LONG_STATE_HELPER_A_WORD_B", 0))
+    self.long_helper_93_wc = int(long93.get("LONG_STATE_HELPER_A_WORD_C", 0))
+    self.long_helper_93_wd = int(long93.get("LONG_STATE_HELPER_A_WORD_D", 0))
+
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
@@ -353,12 +406,14 @@ class CarState(CarStateBase):
       ("EPS_ANGLE", float("nan")),
       ("VEHICLE_SPEED_PROV", float("nan")),
       ("DYNAMICS_YAW_PROV", float("nan")),
+      ("LONG_STATE_HELPER_D", float("nan")),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
       ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
       ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE_EXPERIMENTAL", float("nan")),
+      ("ACC_TJA_OLD_ROUTE_HELPER_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),
     ]
     party_messages = [

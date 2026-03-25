@@ -81,17 +81,18 @@ class CarController(CarControllerBase):
     return "OFF"
 
   @staticmethod
-  def _build_long_frame_core(phase: int, word_b: int, word_c: int, fill: int = 0xFF) -> bytes:
-    # Candidate stock-like envelope for the longitudinal frames. We now know the
-    # live phase byte and the active B/C words reliably; unknown bytes stay on a
-    # conservative stock-like filler until the final TX envelope is fully closed.
-    payload = bytearray([fill] * 17)
+  def _patch_long54_template(template: bytes, phase: int, word_b: int, word_c: int) -> bytes:
+    payload = bytearray(template if len(template) == 17 else bytes([0xFF] * 17))
     payload[0] = phase & 0xFF
-    payload[1] = 0x00
-    payload[2] = 0x00
     payload[3] = word_b & 0xFF
-    payload[4] = (word_b >> 8) & 0xFF
     payload[5] = word_c & 0xFF
+    return bytes(payload)
+
+  @staticmethod
+  def _patch_long59_template(template: bytes, phase: int, word_b: int, word_c: int) -> bytes:
+    payload = bytearray(template if len(template) == 17 else bytes([0xFF] * 17))
+    payload[0] = phase & 0xFF
+    payload[4] = (word_b >> 8) & 0xFF
     payload[6] = (word_c >> 8) & 0xFF
     return bytes(payload)
 
@@ -102,18 +103,17 @@ class CarController(CarControllerBase):
     tx54_wc = int(long_tx_hint["tx_target_wc"]) if int(long_tx_hint["tx_branch"]) == 54 else int(getattr(CS, "long_54_wc", 0))
     tx59_wb = int(long_tx_hint["tx_target_wb"]) if int(long_tx_hint["tx_branch"]) == 59 else int(getattr(CS, "long_59_wb", 0))
     tx59_wc = int(long_tx_hint["tx_target_wc"]) if int(long_tx_hint["tx_branch"]) == 59 else int(getattr(CS, "long_59_wc", 0))
-    tx54 = bytearray(self._build_long_frame_core(tx54_phase, tx54_wb, tx54_wc))
-    tx59 = bytearray(self._build_long_frame_core(tx59_phase, tx59_wb, tx59_wc))
-    # Overwrite byte-local fields with the live stock bytes we already parse.
-    tx54[4] = int(getattr(CS, "long_54_b4", 0)) & 0xFF
-    tx54[6] = int(getattr(CS, "long_54_b6", 0)) & 0xFF
-    tx59[3] = int(getattr(CS, "long_59_b3", 0)) & 0xFF
-    tx59[5] = int(getattr(CS, "long_59_b5", 0)) & 0xFF
+    tx54_template = bytes(getattr(CS, "long_54_stock_template", bytes([0xFF] * 17)))
+    tx59_template = bytes(getattr(CS, "long_59_stock_template", bytes([0xFF] * 17)))
+    tx54 = self._patch_long54_template(tx54_template, tx54_phase, tx54_wb, tx54_wc)
+    tx59 = self._patch_long59_template(tx59_template, tx59_phase, tx59_wb, tx59_wc)
     return {
       "tx54_phase": tx54_phase,
-      "tx54_core_hex": bytes(tx54).hex(),
+      "tx54_template_hex": tx54_template.hex(),
+      "tx54_core_hex": tx54.hex(),
       "tx59_phase": tx59_phase,
-      "tx59_core_hex": bytes(tx59).hex(),
+      "tx59_template_hex": tx59_template.hex(),
+      "tx59_core_hex": tx59.hex(),
     }
 
   def _build_long_can_msgs(self, CS, long_tx_hint: dict[str, int | str], long_tx_core: dict[str, int | str]) -> list[tuple[int, bytes, int]]:
@@ -123,12 +123,10 @@ class CarController(CarControllerBase):
     branch = int(long_tx_hint["tx_branch"])
     if branch == 54:
       msgs.append((54, bytes.fromhex(str(long_tx_core["tx54_core_hex"])), 1))
-      tx59_live = self._build_long_frame_core(int(getattr(CS, "long_59_phase", 0)), int(getattr(CS, "long_59_wb", 0)), int(getattr(CS, "long_59_wc", 0)))
-      msgs.append((59, tx59_live, 1))
+      msgs.append((59, bytes(getattr(CS, "long_59_stock_template", bytes([0xFF] * 17))), 1))
     else:
       msgs.append((59, bytes.fromhex(str(long_tx_core["tx59_core_hex"])), 1))
-      tx54_live = self._build_long_frame_core(int(getattr(CS, "long_54_phase", 0)), int(getattr(CS, "long_54_wb", 0)), int(getattr(CS, "long_54_wc", 0)))
-      msgs.append((54, tx54_live, 1))
+      msgs.append((54, bytes(getattr(CS, "long_54_stock_template", bytes([0xFF] * 17))), 1))
     return msgs
 
   def _shadow_long_tx_hint(self, desired_accel: float, CS) -> dict[str, int | str]:
@@ -306,12 +304,14 @@ class CarController(CarControllerBase):
       "long_59_phase": int(getattr(CS, "long_59_phase", 0)),
       "long_59_b3": int(getattr(CS, "long_59_b3", 0)),
       "long_59_b5": int(getattr(CS, "long_59_b5", 0)),
+      "long_59_stock_template": bytes(getattr(CS, "long_59_stock_template", b"")).hex(),
       # 54 = best current stock brake-blend / regen proxy
       "long_54_phase": int(getattr(CS, "long_54_phase", 0)),
       "long_54_wb": int(getattr(CS, "long_54_wb", 0)),
       "long_54_wc": int(getattr(CS, "long_54_wc", 0)),
       "long_54_b4": int(getattr(CS, "long_54_b4", 0)),
       "long_54_b6": int(getattr(CS, "long_54_b6", 0)),
+      "long_54_stock_template": bytes(getattr(CS, "long_54_stock_template", b"")).hex(),
       # Upstream PT-CAN long intent candidates:
       "long_up_217_raw16": int(getattr(CS, "long_up_217_raw16", 0)),
       "long_up_217_i4_compat12": int(getattr(CS, "long_up_217_i4_compat12", 0)),

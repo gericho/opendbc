@@ -83,6 +83,8 @@ class CarState(CarStateBase):
     self.long_helper_93_wb = 0
     self.long_helper_93_wc = 0
     self.long_helper_93_wd = 0
+    self.long_54_stock_template = bytes([0xFF] * 17)
+    self.long_59_stock_template = bytes([0xFF] * 17)
     self.driver_steer_torque = 0.0
     self.vehicle_speed_kph = 0.0
     self.stock_lat96_phase = 0
@@ -145,6 +147,18 @@ class CarState(CarStateBase):
     if acc217_raw16 >= 63350:
       return ("coast", "medium")
     return ("unknown", "none")
+
+  @staticmethod
+  def _update_long_template(base: bytes, phase: int, preserved: dict[int, int], command: dict[int, int]) -> bytes:
+    payload = bytearray(base if len(base) == 17 else bytes([0xFF] * 17))
+    payload[0] = phase & 0xFF
+    for idx, val in preserved.items():
+      if 0 <= idx < len(payload):
+        payload[idx] = val & 0xFF
+    for idx, val in command.items():
+      if 0 <= idx < len(payload):
+        payload[idx] = val & 0xFF
+    return bytes(payload)
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]
@@ -219,6 +233,20 @@ class CarState(CarStateBase):
     self.long_54_wc = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_C", 0))
     self.long_54_b4 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_4", 0))
     self.long_54_b6 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_6", 0))
+
+    # Dynm-like mimic path: keep a rolling stock template and only patch the
+    # minimal command bytes later in CarController. For 54 the preserved local
+    # bytes are 4/6, while for 59 the preserved local bytes are 3/5.
+    self.long_54_stock_template = self._update_long_template(
+      self.long_54_stock_template, self.long_54_phase,
+      preserved={4: self.long_54_b4, 6: self.long_54_b6},
+      command={3: self.long_54_wb & 0xFF, 5: self.long_54_wc & 0xFF},
+    )
+    self.long_59_stock_template = self._update_long_template(
+      self.long_59_stock_template, self.long_59_phase,
+      preserved={3: self.long_59_b3, 5: self.long_59_b5},
+      command={4: (self.long_59_wb >> 8) & 0xFF, 6: (self.long_59_wc >> 8) & 0xFF},
+    )
 
     pt_accel = cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {})
     self.long_up_217_raw16 = int(pt_accel.get("ACCEL_RAW_PT_CAN", 0))

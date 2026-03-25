@@ -160,6 +160,20 @@ class CarController(CarControllerBase):
       helper_state == "MANAGED_POWERTRAIN" or pos_hint or coast_hint or desired_accel > 0.15
     )
 
+    # Planner-requested negative accel must be allowed to reach the brake-blend
+    # family even when the upstream stock hints are weak. The recent route still
+    # stayed almost entirely on 59 while desired_accel was negative.
+    if has_54 and desired_accel < -0.03:
+      return {
+        "tx_mode": "negative",
+        "tx_branch": 54,
+        "tx_parity": self.LONG_54_ACTIVE_PARITY,
+        "tx_target_wb": live_54_wb,
+        "tx_target_wc": live_54_wc,
+        "tx_source": "stock_live_54_desired_negative",
+        "tx_helper_state": helper_state,
+      }
+
     if has_54 and (helper_state == "MANAGED_BRAKE_BLEND" or neg_hint):
       return {
         "tx_mode": "negative",

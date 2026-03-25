@@ -82,10 +82,11 @@ class CarController(CarControllerBase):
 
   @staticmethod
   def _patch_long54_template(template: bytes, phase: int, word_b: int, word_c: int) -> bytes:
-    payload = bytearray(template if len(template) == 17 else bytes([0xFF] * 17))
+    # Route analysis on real negative/blended windows shows many valid 54 frames
+    # are effectively phase-only or near-empty. Keep 54 as close to the rolling
+    # OEM template as possible and avoid synthesizing a local command slice here.
+    payload = bytearray(template if len(template) == 17 else bytes([0x00] * 17))
     payload[0] = phase & 0xFF
-    payload[3] = word_b & 0xFF
-    payload[5] = word_c & 0xFF
     return bytes(payload)
 
   @staticmethod
@@ -95,6 +96,20 @@ class CarController(CarControllerBase):
     payload[4] = (word_b >> 8) & 0xFF
     payload[6] = (word_c >> 8) & 0xFF
     return bytes(payload)
+
+  @staticmethod
+  def _seed_long54_slice(tx_mode: str, helper_state: str, stock_intent: str, stock_state: str) -> bytes:
+    # Route-backed stock-like local 54 families:
+    #   blended  -> .. 09 fe 07 00 ..
+    #   negative -> .. 09 fd 07 00 ..
+    # Keep a small set of seeds instead of one static override for all states.
+    if stock_intent == "negative" or stock_state in ("ACC_ARMED_NEGATIVE", "UNKNOWN_NEGATIVE"):
+      return b"\x09\xfd\x07\x00"
+    if tx_mode == "negative" or helper_state == "MANAGED_BRAKE_BLEND":
+      return b"\x09\xfd\x07\x00"
+    if stock_intent == "blended" or stock_state in ("ACC_ARMED_BLENDED", "MANAGED_BLENDED"):
+      return b"\x09\xfe\x07\x00"
+    return b"\x09\xfe\x07\x00"
 
   def _build_shadow_long_tx(self, CS, long_tx_hint: dict[str, int | str]) -> dict[str, int | str]:
     tx54_phase = int(getattr(CS, "long_54_phase", 0))
@@ -107,6 +122,21 @@ class CarController(CarControllerBase):
     tx59_template = bytes(getattr(CS, "long_59_stock_template", bytes([0xFF] * 17)))
     tx54 = self._patch_long54_template(tx54_template, tx54_phase, tx54_wb, tx54_wc)
     tx59 = self._patch_long59_template(tx59_template, tx59_phase, tx59_wb, tx59_wc)
+    # Real i3 negative/blended 54 frames are often sparse, but the local
+    # override slice 3..6 is not always all-zero. When our reconstructed 54
+    # template collapses to a phase-only frame, seed the injected slice with
+    # the most common stock-like negative pattern seen in routes
+    # (.. 09 fe 07 00 ..) instead of transmitting an empty 54 override.
+    if int(long_tx_hint["tx_branch"]) == 54 and str(long_tx_hint["tx_mode"]) in ("negative", "blend_or_hold"):
+      tx54_bytes = bytearray(tx54)
+      if tx54_bytes[3:7] == b"\x00\x00\x00\x00":
+        tx54_bytes[3:7] = self._seed_long54_slice(
+          str(long_tx_hint["tx_mode"]),
+          str(long_tx_hint["tx_helper_state"]),
+          str(getattr(CS, "stock_long_intent", "unknown")),
+          str(getattr(CS, "stock_long_state_fine", "unknown")),
+        )
+      tx54 = bytes(tx54_bytes)
     return {
       "tx54_phase": tx54_phase,
       "tx54_template_hex": tx54_template.hex(),
@@ -119,22 +149,18 @@ class CarController(CarControllerBase):
   def _build_long_can_msgs(self, CS, long_tx_hint: dict[str, int | str], long_tx_core: dict[str, int | str]) -> list[tuple[int, bytes, int]]:
     if not self.enable_long_tx_builder or not getattr(self, "_stock_long_tx_gate", False):
       return []
-    branch = int(long_tx_hint["tx_branch"])
-    if branch == 54:
-      payload = bytes.fromhex(str(long_tx_core["tx54_core_hex"]))
-      base = int(long_tx_core["tx54_phase"]) & 0xFF
-    else:
-      payload = bytes.fromhex(str(long_tx_core["tx59_core_hex"]))
-      base = int(long_tx_core["tx59_phase"]) & 0xFF
-    # Firmware injector expects:
-    #   dat[0] = base/phase
-    #   dat[1:1+replace_offset] = padding
-    #   dat[1+replace_offset:] = replacement slice
-    # For BMW i3 mimic long:
-    #   replace_offset = 3
-    #   replace_len = 4
-    override = bytes([base, 0x00, 0x00, 0x00]) + payload[3:7]
-    return [(branch, override, 1)]
+    # Firmware injector uses the separate USB header base as the rule cycle selector,
+    # not the FlexRay payload phase byte. For the current dynm-style i3 rules that
+    # selector is fixed to cycle_base=1.
+    base = 0x01
+    tx54 = bytes.fromhex(str(long_tx_core["tx54_core_hex"]))
+    tx59 = bytes.fromhex(str(long_tx_core["tx59_core_hex"]))
+    # BMW i3 long looks like a coordinated two-frame family. Send both 54 and 59
+    # together so the ECU sees a stock-like pair instead of a single patched frame.
+    return [
+      (54, bytes([base]) + tx54[:9], 1),
+      (59, bytes([base]) + tx59[:9], 1),
+    ]
 
   def _shadow_long_tx_hint(self, desired_accel: float, CS) -> dict[str, int | str]:
     # Use the raw upstream PT-CAN hints first. Yesterday's fault routes already
@@ -143,38 +169,34 @@ class CarController(CarControllerBase):
     # biasing it, otherwise positive/coast windows get polluted.
     helper_state = self._shadow_long_helper_state(CS)
     upstream_mode = str(getattr(CS, "stock_long_upstream_mode", "unknown"))
+    stock_intent = str(getattr(CS, "stock_long_intent", "unknown"))
+    stock_state = str(getattr(CS, "stock_long_state_fine", "unknown"))
+    live_54_phase = int(getattr(CS, "long_54_phase", 0))
     live_54_wb = int(getattr(CS, "long_54_wb", 0))
     live_54_wc = int(getattr(CS, "long_54_wc", 0))
+    live_59_phase = int(getattr(CS, "long_59_phase", 0))
     live_59_wb = int(getattr(CS, "long_59_wb", 0))
     live_59_wc = int(getattr(CS, "long_59_wc", 0))
-    has_54 = bool(live_54_wb or live_54_wc)
-    has_59 = bool(live_59_wb or live_59_wc)
+    live_54_template = bytes(getattr(CS, "long_54_stock_template", b""))
+    live_59_template = bytes(getattr(CS, "long_59_stock_template", b""))
+    has_54 = bool(live_54_phase or live_54_wb or live_54_wc or (live_54_template and any(b != 0xFF for b in live_54_template)))
+    has_59 = bool(live_59_phase or live_59_wb or live_59_wc or (live_59_template and any(b != 0xFF for b in live_59_template)))
     raw_accel = int(getattr(CS, "long_up_217_raw16", 0))
     raw_brake_b1 = int(getattr(CS, "long_up_796_b1", 0))
 
     brake_sig = 0 < raw_brake_b1 <= 0x0F
-    neg_hint = brake_sig or bool(CS.out.brakePressed) or desired_accel < -0.03 or upstream_mode == "negative"
+    neg_hint = brake_sig or bool(CS.out.brakePressed) or upstream_mode == "negative" or stock_intent in ("negative", "blended") or stock_state in ("ACC_ARMED_NEGATIVE", "ACC_ARMED_BLENDED", "UNKNOWN_NEGATIVE")
     pos_hint = raw_accel != 0 and raw_accel <= 63349
     coast_hint = raw_accel >= 63350
     strong_59 = has_59 and not brake_sig and not bool(CS.out.brakePressed) and (
-      helper_state == "MANAGED_POWERTRAIN" or pos_hint or coast_hint or desired_accel > 0.15
+      helper_state == "MANAGED_POWERTRAIN" or pos_hint or coast_hint
     )
 
-    # Planner-requested negative accel must be allowed to reach the brake-blend
-    # family even when the upstream stock hints are weak. The recent route still
-    # stayed almost entirely on 59 while desired_accel was negative.
-    if has_54 and desired_accel < -0.03:
-      return {
-        "tx_mode": "negative",
-        "tx_branch": 54,
-        "tx_parity": self.LONG_54_ACTIVE_PARITY,
-        "tx_target_wb": live_54_wb,
-        "tx_target_wc": live_54_wc,
-        "tx_source": "stock_live_54_desired_negative",
-        "tx_helper_state": helper_state,
-      }
-
-    if has_54 and (helper_state == "MANAGED_BRAKE_BLEND" or neg_hint):
+    # Now that sendcan is confirmed to be alive, braking demand must bias hard
+    # toward 54. Recent real runs still sent 59 under strong negative aTarget,
+    # especially through MANAGED_NEUTRAL_IDLE / ACC_ARMED_NEGATIVE contexts.
+    neg_demand = desired_accel < -0.20
+    if has_54 and (helper_state == "MANAGED_BRAKE_BLEND" or neg_hint or neg_demand):
       return {
         "tx_mode": "negative",
         "tx_branch": 54,
@@ -185,17 +207,18 @@ class CarController(CarControllerBase):
         "tx_helper_state": helper_state,
       }
 
-    # On the logged BMW routes, ACC-armed contexts with a live 54 family were
-    # still choosing 59 too often. Keep 54 available there, but only when the
-    # powertrain path is not strongly positive/coast.
-    if has_54 and helper_state in ("ACC_ARMED", "ACC_GATE_ONLY", "OFF") and not strong_59 and desired_accel <= 0.05:
+    # Keep 54 as the default whenever it exists and 59 is not explicitly backed
+    # by stock positive/coast evidence. Also keep 54 through managed/armed neutral
+    # contexts while desired accel is at or below zero, since those were still
+    # incorrectly landing on 59 in the live braking runs.
+    if has_54 and (not strong_59 or (helper_state in ("MANAGED_BRAKE_BLEND", "ACC_ARMED", "ACC_GATE_ONLY", "OFF") and desired_accel <= 0.0)):
       return {
         "tx_mode": "blend_or_hold",
         "tx_branch": 54,
         "tx_parity": self.LONG_54_ACTIVE_PARITY,
         "tx_target_wb": live_54_wb,
         "tx_target_wc": live_54_wc,
-        "tx_source": "stock_live_54_armed_hold",
+        "tx_source": "stock_live_54_default",
         "tx_helper_state": helper_state,
       }
 
@@ -279,8 +302,8 @@ class CarController(CarControllerBase):
       return []
     tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
     tx96 = bytes.fromhex(str(lateral_tx["tx96_hex"]))
-    base72 = int(lateral_tx["lat_phase"]) & 0xFF
-    base96 = int(lateral_tx["lat_phase"]) & 0xFF
+    base72 = 0x01
+    base96 = 0x01
     # Firmware injector expects the override dat payload to contain only:
     #   dat[0] = base/phase
     #   dat[1:] = replacement bytes (replace_offset = 0)
@@ -304,13 +327,11 @@ class CarController(CarControllerBase):
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
     helper_state = self._shadow_long_helper_state(CS)
-    self._stock_long_tx_gate = bool(
-      CC.longActive and (
-        bool(getattr(CS.out.cruiseState, "enabled", False)) or
-        bool(getattr(CS, "stock_acc_base_armed", False)) or
-        helper_state in ("MANAGED_BRAKE_BLEND", "MANAGED_POWERTRAIN", "ACC_ARMED", "ACC_GATE_ONLY")
-      )
-    )
+    # Keep the TX gate simple and observable while finishing the injector path.
+    # The previous stock-context gate stayed too opaque in real runs and blocked
+    # sendcan entirely, which prevented us from distinguishing gate issues from
+    # payload issues. Long TX should follow controlsd's longActive directly.
+    self._stock_long_tx_gate = bool(CC.longActive)
     lat_allowed = bool(CC.latActive)
 
     desired_angle = self.apply_angle_last
@@ -426,11 +447,14 @@ class CarController(CarControllerBase):
       "long_tx_builder_enabled": self.enable_long_tx_builder,
       "long_tx_builder_msg_count": len(long_can_msgs),
       "long_tx_override_hex": long_can_msgs[0][1].hex() if long_can_msgs else "",
+      "long_tx_override_base": long_can_msgs[0][1][0] if long_can_msgs else -1,
       **long_tx_core,
       **long_tx_hint,
       **lateral_tx,
       "lat72_override_hex": lateral_can_msgs[0][1].hex() if lateral_can_msgs else "",
+      "lat72_override_base": lateral_can_msgs[0][1][0] if lateral_can_msgs else -1,
       "lat96_override_hex": lateral_can_msgs[1][1].hex() if len(lateral_can_msgs) > 1 else "",
+      "lat96_override_base": lateral_can_msgs[1][1][0] if len(lateral_can_msgs) > 1 else -1,
       "desired_angle": float(desired_angle),
       "lat_allowed": lat_allowed,
       "stock_acc_lateral_gate": False,

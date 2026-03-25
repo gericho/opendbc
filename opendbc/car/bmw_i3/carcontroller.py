@@ -10,7 +10,7 @@ from opendbc.car.bmw.values import CarControllerParams
 
 class CarController(CarControllerBase):
   ENABLE_LONG_TX_BUILDER = True
-  ENABLE_LATERAL_TX_BUILDER = True
+  ENABLE_LATERAL_TX_BUILDER = False
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -117,7 +117,7 @@ class CarController(CarControllerBase):
     }
 
   def _build_long_can_msgs(self, CS, long_tx_hint: dict[str, int | str], long_tx_core: dict[str, int | str]) -> list[tuple[int, bytes, int]]:
-    if not self.enable_long_tx_builder:
+    if not self.enable_long_tx_builder or not getattr(self, "_stock_long_tx_gate", False):
       return []
     branch = int(long_tx_hint["tx_branch"])
     if branch == 54:
@@ -249,6 +249,14 @@ class CarController(CarControllerBase):
 
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
+    helper_state = self._shadow_long_helper_state(CS)
+    self._stock_long_tx_gate = bool(
+      CC.longActive and (
+        bool(getattr(CS.out.cruiseState, "enabled", False)) or
+        bool(getattr(CS, "stock_acc_base_armed", False)) or
+        helper_state in ("MANAGED_BRAKE_BLEND", "MANAGED_POWERTRAIN", "ACC_ARMED", "ACC_GATE_ONLY")
+      )
+    )
     self._stock_acc_lateral_gate = bool(getattr(CS, "stock_acc_base_armed", False))
     lat_allowed = bool(CC.latActive or self._stock_acc_lateral_gate)
 
@@ -306,6 +314,7 @@ class CarController(CarControllerBase):
     self.last_shadow_long_debug = {
       "desired_accel": desired_accel,
       "long_active": bool(CC.longActive),
+      "long_tx_allowed": bool(self._stock_long_tx_gate),
       "gate": int(getattr(CS, "stock_acc_ctrl_gate", 0)),
       "state": int(getattr(CS, "stock_acc_ctrl_state", 0)),
       "acc_base_armed": bool(getattr(CS, "stock_acc_base_armed", False)),
@@ -336,7 +345,7 @@ class CarController(CarControllerBase):
       "long_up_796_b1": int(getattr(CS, "long_up_796_b1", 0)),
       "stock_long_upstream_mode": str(getattr(CS, "stock_long_upstream_mode", "unknown")),
       "stock_long_upstream_confidence": str(getattr(CS, "stock_long_upstream_confidence", "none")),
-      "stock_long_helper_state": self._shadow_long_helper_state(CS),
+      "stock_long_helper_state": helper_state,
       "long_helper_46_wa": int(getattr(CS, "long_helper_46_wa", 0)),
       "long_helper_46_wb": int(getattr(CS, "long_helper_46_wb", 0)),
       "long_helper_46_wc": int(getattr(CS, "long_helper_46_wc", 0)),

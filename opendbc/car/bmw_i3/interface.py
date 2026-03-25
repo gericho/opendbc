@@ -10,7 +10,7 @@ ButtonType = structs.CarState.ButtonEvent.Type
 class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
-  ENABLE_LONG_CONTROL = False
+  ENABLE_LONG_CONTROL = True
 
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate, fingerprint, car_fw, experimental_long, is_release, docs):

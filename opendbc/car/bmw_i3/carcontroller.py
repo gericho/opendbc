@@ -260,7 +260,7 @@ class CarController(CarControllerBase):
     }
 
   def _build_lateral_can_msgs(self, CC, lateral_tx):
-    lat_allowed = bool(CC.latActive or getattr(self, "_stock_acc_lateral_gate", False))
+    lat_allowed = bool(CC.latActive)
     if not (self.enable_lateral_tx_builder and lat_allowed):
       return []
     tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
@@ -297,8 +297,7 @@ class CarController(CarControllerBase):
         helper_state in ("MANAGED_BRAKE_BLEND", "MANAGED_POWERTRAIN", "ACC_ARMED", "ACC_GATE_ONLY")
       )
     )
-    self._stock_acc_lateral_gate = bool(getattr(CS, "stock_acc_base_armed", False))
-    lat_allowed = bool(CC.latActive or self._stock_acc_lateral_gate)
+    lat_allowed = bool(CC.latActive)
 
     desired_angle = self.apply_angle_last
     if lat_allowed:
@@ -420,7 +419,7 @@ class CarController(CarControllerBase):
       "lat96_override_hex": lateral_can_msgs[1][1].hex() if len(lateral_can_msgs) > 1 else "",
       "desired_angle": float(desired_angle),
       "lat_allowed": lat_allowed,
-      "stock_acc_lateral_gate": bool(self._stock_acc_lateral_gate),
+      "stock_acc_lateral_gate": False,
       "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
       "stock_lat96_b1": int(getattr(CS, "stock_lat96_b1", 0)),
       "stock_lat96_b2": int(getattr(CS, "stock_lat96_b2", 0)),

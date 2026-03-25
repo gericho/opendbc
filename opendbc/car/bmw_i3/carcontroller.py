@@ -10,7 +10,7 @@ from opendbc.car.bmw.values import CarControllerParams
 
 class CarController(CarControllerBase):
   ENABLE_LONG_TX_BUILDER = True
-  ENABLE_LATERAL_TX_BUILDER = False
+  ENABLE_LATERAL_TX_BUILDER = True
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -119,15 +119,22 @@ class CarController(CarControllerBase):
   def _build_long_can_msgs(self, CS, long_tx_hint: dict[str, int | str], long_tx_core: dict[str, int | str]) -> list[tuple[int, bytes, int]]:
     if not self.enable_long_tx_builder:
       return []
-    msgs = []
     branch = int(long_tx_hint["tx_branch"])
     if branch == 54:
-      msgs.append((54, bytes.fromhex(str(long_tx_core["tx54_core_hex"])), 1))
-      msgs.append((59, bytes(getattr(CS, "long_59_stock_template", bytes([0xFF] * 17))), 1))
+      payload = bytes.fromhex(str(long_tx_core["tx54_core_hex"]))
+      base = int(long_tx_core["tx54_phase"]) & 0xFF
     else:
-      msgs.append((59, bytes.fromhex(str(long_tx_core["tx59_core_hex"])), 1))
-      msgs.append((54, bytes(getattr(CS, "long_54_stock_template", bytes([0xFF] * 17))), 1))
-    return msgs
+      payload = bytes.fromhex(str(long_tx_core["tx59_core_hex"]))
+      base = int(long_tx_core["tx59_phase"]) & 0xFF
+    # Firmware injector expects:
+    #   dat[0] = base/phase
+    #   dat[1:1+replace_offset] = padding
+    #   dat[1+replace_offset:] = replacement slice
+    # For BMW i3 mimic long:
+    #   replace_offset = 3
+    #   replace_len = 4
+    override = bytes([base, 0x00, 0x00, 0x00]) + payload[3:7]
+    return [(branch, override, 1)]
 
   def _shadow_long_tx_hint(self, desired_accel: float, CS) -> dict[str, int | str]:
     # Prefer live stock words when they exist: the raw helper work showed that
@@ -213,11 +220,19 @@ class CarController(CarControllerBase):
     }
 
   def _build_lateral_can_msgs(self, CC, lateral_tx):
-    if not (self.enable_lateral_tx_builder and CC.latActive):
+    lat_allowed = bool(CC.latActive or getattr(self, "_stock_acc_lateral_gate", False))
+    if not (self.enable_lateral_tx_builder and lat_allowed):
       return []
+    tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
+    tx96 = bytes.fromhex(str(lateral_tx["tx96_hex"]))
+    base72 = int(lateral_tx["lat_phase"]) & 0xFF
+    base96 = int(lateral_tx["lat_phase"]) & 0xFF
+    # Firmware injector expects the override dat payload to contain only:
+    #   dat[0] = base/phase
+    #   dat[1:] = replacement bytes (replace_offset = 0)
     return [
-      (72, bytes.fromhex(str(lateral_tx["tx72_hex"])), 0),
-      (96, bytes.fromhex(str(lateral_tx["tx96_hex"])), 0),
+      (72, bytes([base72]) + tx72[:9], 0),
+      (96, bytes([base96]) + tx96[:9], 0),
     ]
 
   def _shadow_force_weaken(self, v_ego: float) -> int:
@@ -234,9 +249,11 @@ class CarController(CarControllerBase):
 
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators
+    self._stock_acc_lateral_gate = bool(getattr(CS, "stock_acc_base_armed", False))
+    lat_allowed = bool(CC.latActive or self._stock_acc_lateral_gate)
 
     desired_angle = self.apply_angle_last
-    if CC.latActive:
+    if lat_allowed:
       desired_angle = float(actuators.steeringAngleDeg)
       desired_angle = apply_steer_angle_limits_vm(desired_angle, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
                                                   True, CarControllerParams, self.VM)
@@ -247,7 +264,7 @@ class CarController(CarControllerBase):
         cnt1 = self._next_shadow_cnt()
         angle_error = abs(desired_angle - CS.out.steeringAngleDeg)
         driver_override = bool(CS.out.steeringPressed)
-        tja_ready = int(CS.out.vEgoRaw > 0.1 and not driver_override)
+        tja_ready = int(CS.out.vEgoRaw > 0.1 and not driver_override and lat_allowed)
         lat_triggered = int(tja_ready and angle_error > 0.5)
         steering_engaged = 2 if tja_ready else 1
         steer_torque_req = self._shadow_steer_torque_req(desired_angle, CS.out.steeringAngleDeg)
@@ -346,10 +363,15 @@ class CarController(CarControllerBase):
       "long_helper_93_wd": int(getattr(CS, "long_helper_93_wd", 0)),
       "long_tx_builder_enabled": self.enable_long_tx_builder,
       "long_tx_builder_msg_count": len(long_can_msgs),
+      "long_tx_override_hex": long_can_msgs[0][1].hex() if long_can_msgs else "",
       **long_tx_core,
       **long_tx_hint,
       **lateral_tx,
+      "lat72_override_hex": lateral_can_msgs[0][1].hex() if lateral_can_msgs else "",
+      "lat96_override_hex": lateral_can_msgs[1][1].hex() if len(lateral_can_msgs) > 1 else "",
       "desired_angle": float(desired_angle),
+      "lat_allowed": lat_allowed,
+      "stock_acc_lateral_gate": bool(self._stock_acc_lateral_gate),
       "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
       "stock_lat96_b1": int(getattr(CS, "stock_lat96_b1", 0)),
       "stock_lat96_b2": int(getattr(CS, "stock_lat96_b2", 0)),

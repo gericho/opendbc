@@ -137,27 +137,55 @@ class CarController(CarControllerBase):
     return [(branch, override, 1)]
 
   def _shadow_long_tx_hint(self, desired_accel: float, CS) -> dict[str, int | str]:
-    # Prefer live stock words when they exist: the raw helper work showed that
-    # exact family selection is upstream-state driven, not a simple desired-accel
-    # heuristic. Keep desired_accel only as a weak fallback sign hint.
+    # Use the raw upstream PT-CAN hints first. Yesterday's fault routes already
+    # showed that negative stock contexts exist, but they were being swallowed by
+    # branch 59. Keep 54 selection narrow and evidence-based instead of globally
+    # biasing it, otherwise positive/coast windows get polluted.
     helper_state = self._shadow_long_helper_state(CS)
-    neg_hint = desired_accel < -0.05 or bool(CS.out.brakePressed) or getattr(CS, "stock_long_upstream_mode", "unknown") == "negative"
+    upstream_mode = str(getattr(CS, "stock_long_upstream_mode", "unknown"))
     live_54_wb = int(getattr(CS, "long_54_wb", 0))
     live_54_wc = int(getattr(CS, "long_54_wc", 0))
     live_59_wb = int(getattr(CS, "long_59_wb", 0))
     live_59_wc = int(getattr(CS, "long_59_wc", 0))
+    has_54 = bool(live_54_wb or live_54_wc)
+    has_59 = bool(live_59_wb or live_59_wc)
+    raw_accel = int(getattr(CS, "long_up_217_raw16", 0))
+    raw_brake_b1 = int(getattr(CS, "long_up_796_b1", 0))
 
-    if (helper_state == "MANAGED_BRAKE_BLEND" or neg_hint) and (live_54_wb or live_54_wc):
+    brake_sig = 0 < raw_brake_b1 <= 0x0F
+    neg_hint = brake_sig or bool(CS.out.brakePressed) or desired_accel < -0.03 or upstream_mode == "negative"
+    pos_hint = raw_accel != 0 and raw_accel <= 63349
+    coast_hint = raw_accel >= 63350
+    strong_59 = has_59 and not brake_sig and not bool(CS.out.brakePressed) and (
+      helper_state == "MANAGED_POWERTRAIN" or pos_hint or coast_hint or desired_accel > 0.15
+    )
+
+    if has_54 and (helper_state == "MANAGED_BRAKE_BLEND" or neg_hint):
       return {
         "tx_mode": "negative",
         "tx_branch": 54,
         "tx_parity": self.LONG_54_ACTIVE_PARITY,
         "tx_target_wb": live_54_wb,
         "tx_target_wc": live_54_wc,
-        "tx_source": "stock_live_54",
+        "tx_source": "stock_live_54_negative",
         "tx_helper_state": helper_state,
       }
-    if live_59_wb or live_59_wc:
+
+    # On the logged BMW routes, ACC-armed contexts with a live 54 family were
+    # still choosing 59 too often. Keep 54 available there, but only when the
+    # powertrain path is not strongly positive/coast.
+    if has_54 and helper_state in ("ACC_ARMED", "ACC_GATE_ONLY", "OFF") and not strong_59 and desired_accel <= 0.05:
+      return {
+        "tx_mode": "blend_or_hold",
+        "tx_branch": 54,
+        "tx_parity": self.LONG_54_ACTIVE_PARITY,
+        "tx_target_wb": live_54_wb,
+        "tx_target_wc": live_54_wc,
+        "tx_source": "stock_live_54_armed_hold",
+        "tx_helper_state": helper_state,
+      }
+
+    if has_59:
       return {
         "tx_mode": "positive_or_coast",
         "tx_branch": 59,
@@ -167,6 +195,18 @@ class CarController(CarControllerBase):
         "tx_source": "stock_live_59",
         "tx_helper_state": helper_state,
       }
+
+    if has_54:
+      return {
+        "tx_mode": "blend_or_hold",
+        "tx_branch": 54,
+        "tx_parity": self.LONG_54_ACTIVE_PARITY,
+        "tx_target_wb": live_54_wb,
+        "tx_target_wc": live_54_wc,
+        "tx_source": "stock_live_54_fallback",
+        "tx_helper_state": helper_state,
+      }
+
     return {
       "tx_mode": "positive_or_coast",
       "tx_branch": 59,

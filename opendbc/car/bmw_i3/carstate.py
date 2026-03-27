@@ -12,6 +12,26 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
+  # Practical route-backed lateral decoder on the i3 is phase-local:
+  #   selector  -> 72.byte0
+  #   payload   -> 96.byte1
+  #   support   -> 96.byte2
+  # Values are medians from route 00000402 TJA-only labeling.
+  _LAT_B1_PHASE_MAP = {
+    57: {"direction": "R_high", "left": 63.0, "center": 174.5, "right": 236.0, "confidence": "high"},
+    35: {"direction": "R_high", "left": 99.0, "center": 174.5, "right": 236.0, "confidence": "high"},
+    49: {"direction": "R_high", "left": 81.0, "center": 175.0, "right": 217.0, "confidence": "high"},
+    58: {"direction": "R_low",  "left": 196.5, "center": 174.5, "right": 62.0,  "confidence": "high"},
+    46: {"direction": "R_high", "left": 99.0, "center": 157.0, "right": 216.0, "confidence": "high"},
+    25: {"direction": "R_low",  "left": 176.5, "center": 110.0, "right": 62.0,  "confidence": "high"},
+    8:  {"direction": "R_high", "left": 99.0, "center": 116.0, "right": 217.0, "confidence": "medium"},
+    5:  {"direction": "R_high", "left": 99.0, "center": 116.0, "right": 216.0, "confidence": "medium"},
+    60: {"direction": "R_high", "left": 63.0, "center": 133.0, "right": 149.5, "confidence": "medium"},
+    51: {"direction": "R_high", "left": 137.5, "center": 176.0, "right": 217.0, "confidence": "low"},
+    27: {"direction": "R_high", "left": 99.0, "center": 133.0, "right": 176.0, "confidence": "low"},
+    53: {"direction": "R_high", "left": 62.5, "center": 216.0, "right": 236.5, "confidence": "low"},
+  }
+
   @staticmethod
   def _decode_eps_angle(angle_raw: float) -> float:
     # Live routes show frame 51 behaving like a wrapped steering-wheel angle
@@ -87,6 +107,7 @@ class CarState(CarStateBase):
     self.long_59_stock_template = bytes([0xFF] * 17)
     self.driver_steer_torque = 0.0
     self.vehicle_speed_kph = 0.0
+    self.stock_lat72_phase = 0
     self.stock_lat96_phase = 0
     self.stock_lat96_b1 = 0
     self.stock_lat96_b2 = 0
@@ -101,35 +122,80 @@ class CarState(CarStateBase):
 
   @staticmethod
   def _stock_lat_dir_from_phase_b1(phase: int, b1: int) -> tuple[str, str]:
-    # Best current route-derived local classifier for LAT96.byte1.
-    # This is intentionally phase-local, not a fake global signed command.
-    # Strongest phase: 60. Secondary supporting phases: 24 and 8.
-    if phase == 60:
-      return ("right", "high") if b1 > 112 else ("left", "high")
-    if phase == 24:
-      return ("right", "medium") if b1 > 81 else ("left", "medium")
-    if phase == 8:
-      return ("right", "medium") if b1 > 150 else ("left", "medium")
-    return ("unknown", "none")
+    row = CarState._LAT_B1_PHASE_MAP.get(int(phase))
+    if row is None:
+      return ("unknown", "none")
+
+    left = float(row["left"])
+    center = float(row["center"])
+    right = float(row["right"])
+    thr_lc = (left + center) / 2.0
+    thr_cr = (center + right) / 2.0
+    b1f = float(b1)
+
+    if row["direction"] == "R_high":
+      if b1f <= thr_lc:
+        return ("left", str(row["confidence"]))
+      if b1f >= thr_cr:
+        return ("right", str(row["confidence"]))
+      return ("center", str(row["confidence"]))
+
+    if b1f >= thr_lc:
+      return ("left", str(row["confidence"]))
+    if b1f <= thr_cr:
+      return ("right", str(row["confidence"]))
+    return ("center", str(row["confidence"]))
 
   @staticmethod
   def _stock_lat_mag_from_phase_b1(phase: int, b1: int) -> tuple[float, str]:
-    # Current route-backed magnitude proxy is intentionally normalized, not a
-    # fake degree-accurate command. Phase 60 is the only family with strong
-    # enough signed correlation to call "high". Phases 24 and 8 remain weak.
-    if phase == 60:
-      thr = 112.083
-      scale = 110.0
-      return (min(1.0, abs(b1 - thr) / scale), "high")
-    if phase == 24:
-      thr = 80.833
-      scale = 135.0
-      return (min(1.0, abs(b1 - thr) / scale), "low")
-    if phase == 8:
-      thr = 149.5
-      scale = 90.0
-      return (min(1.0, abs(b1 - thr) / scale), "low")
-    return (0.0, "none")
+    row = CarState._LAT_B1_PHASE_MAP.get(int(phase))
+    if row is None:
+      return (0.0, "none")
+
+    left = float(row["left"])
+    center = float(row["center"])
+    right = float(row["right"])
+    span = max(abs(left - center), abs(right - center))
+    if span <= 1e-6:
+      return (0.0, "none")
+    return (min(1.0, abs(float(b1) - center) / span), str(row["confidence"]))
+
+  @staticmethod
+  def _stock_lat_support_from_b2(phase: int, b2: int) -> tuple[float, str]:
+    row = CarState._lat_phase_entry(int(phase))
+    if row is None:
+      return (0.0, "none")
+    if not all(k in row for k in ("L_b2", "C_b2", "R_b2")):
+      return (0.0, "none")
+    left = float(row["L_b2"])
+    center = float(row["C_b2"])
+    right = float(row["R_b2"])
+    span = max(abs(left - center), abs(right - center))
+    if span <= 1e-6:
+      return (0.0, "none")
+    return (min(1.0, abs(float(b2) - center) / span), "low")
+
+  @staticmethod
+  def _lat_phase_entry(phase: int) -> dict | None:
+    row = CarState._LAT_B1_PHASE_MAP.get(int(phase))
+    if row is None:
+      return None
+    # Attach byte2 support medians locally without inventing DBC fields.
+    support = {
+      57: {"L_b2": 252.0, "C_b2": 252.5, "R_b2": 251.0},
+      35: {"L_b2": 246.0, "C_b2": 242.0, "R_b2": 247.0},
+      49: {"L_b2": 250.0, "C_b2": 253.5, "R_b2": 251.0},
+      58: {"L_b2": 251.0, "C_b2": 250.0, "R_b2": 253.0},
+      46: {"L_b2": 252.0, "C_b2": 241.0, "R_b2": 252.5},
+      25: {"L_b2": 249.5, "C_b2": 248.0, "R_b2": 253.0},
+      8: {"L_b2": 250.0, "C_b2": 248.5, "R_b2": 251.0},
+      5: {"L_b2": 249.0, "C_b2": 248.0, "R_b2": 245.0},
+      60: {"L_b2": 246.0, "C_b2": 241.0, "R_b2": 252.0},
+      51: {"L_b2": 250.0, "C_b2": 252.0, "R_b2": 251.0},
+      27: {"L_b2": 251.0, "C_b2": 242.0, "R_b2": 250.0},
+      53: {"L_b2": 248.5, "C_b2": 248.0, "R_b2": 248.0},
+    }
+    return {**row, **support.get(int(phase), {})}
 
   @staticmethod
   def _stock_long_upstream_hint(acc217_raw16: int, brake796_b1: int) -> tuple[str, str]:
@@ -276,6 +342,8 @@ class CarState(CarStateBase):
     self.long_helper_93_wc = int(long93.get("LONG_STATE_HELPER_A_WORD_C", 0))
     self.long_helper_93_wd = int(long93.get("LONG_STATE_HELPER_A_WORD_D", 0))
 
+    lat72 = cp_flexray.vl.get("LAT_STOCK_TX_CANDIDATE", {})
+    self.stock_lat72_phase = int(lat72.get("LAT_STOCK_TX_PHASE_BYTE_0", 0))
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
@@ -290,8 +358,9 @@ class CarState(CarStateBase):
     #   112.byte5 bit5 clear -> assisted/TJA tendency
     self.stock_lat_active_hint = (self.stock_lat112_b5 & 0x20) == 0
 
-    self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b1(self.stock_lat96_phase, self.stock_lat96_b1)
-    self.stock_lat_mag_hint, self.stock_lat_mag_confidence = self._stock_lat_mag_from_phase_b1(self.stock_lat96_phase, self.stock_lat96_b1)
+    phase_for_decode = self.stock_lat72_phase
+    self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b1(phase_for_decode, self.stock_lat96_b1)
+    self.stock_lat_mag_hint, self.stock_lat_mag_confidence = self._stock_lat_mag_from_phase_b1(phase_for_decode, self.stock_lat96_b1)
     if not self.stock_lat_active_hint:
       self.stock_lat_dir_hint = "unknown"
       self.stock_lat_dir_confidence = "none"
@@ -441,6 +510,7 @@ class CarState(CarStateBase):
       ("LONG_STATE_HELPER_D", float("nan")),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
       ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
+      ("LAT_STOCK_TX_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),

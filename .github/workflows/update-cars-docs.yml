@@ -1,12 +1,11 @@
 name: Update CARS.md
 
 on:
-  schedule:
-    - cron: '0 8 * * *'  # 12am PST (8am UTC)
   workflow_dispatch:
 
 jobs:
   update-cars:
+    if: false  # disabled until the CARS.md update workflow is fixed
     runs-on: ubuntu-24.04
     permissions:
       contents: write

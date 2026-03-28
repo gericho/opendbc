@@ -385,13 +385,13 @@ CM_ BO_ 415 "Primary PT-CAN cruise-button frame. Bytes 2-3 changed cleanly acros
 
 BO_ 769 PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE: 7 BMW_I3
  SG_ PTCAN_STEERING_WHEEL_COMPANION_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ PTCAN_STEERING_WHEEL_COMPANION_ANGLE_I4_COMPAT : 16|16@1+ (0.04375,-1433.6) [0|1433.55625] "deg" BMW_I3
-CM_ BO_ 769 "Low-rate PT-CAN steering-angle companion on CAN src 2. Steering-only route 00000004 shows this frame tracks the same centered angle family as 770 with the same i4-compatible scale, but at about 5 Hz and with smaller observed extrema (~-458..+462 deg versus 770 at ~-590..+595 deg). Treat 770 as the primary live steering-wheel-angle feedback and 769 as a decimated/filtered companion until the exact BMW semantic split is confirmed.";
+ SG_ PTCAN_STEERING_WHEEL_COMPANION_ANGLE_I3_CAL : 16|16@1+ (0.03540,-1159.28) [-720|720] "deg" BMW_I3
+CM_ BO_ 769 "Low-rate PT-CAN steering-angle companion on CAN src 2. Treat 770 as the primary live steering-wheel-angle feedback and 769 as a decimated/filtered companion. Current linear scale is centered around raw ~32748 and validated live against about +/-180 deg wheel checkpoints, with raw 37850 ~= +180 deg and raw 27677 ~= -180 deg. Keep the exact OEM semantic split between 769 and 770 open until a dedicated visual steering calibration route confirms the final mapping.";
 
 BO_ 770 PTCAN_STEERING_WHEEL_CANDIDATE: 7 BMW_I3
  SG_ PTCAN_STEERING_WHEEL_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ PTCAN_STEERING_WHEEL_ANGLE_I4_COMPAT : 16|16@1+ (0.04375,-1433.6) [0|1433.55625] "deg" BMW_I3
-CM_ BO_ 770 "Primary PT-CAN steering-wheel-angle helper on CAN src 2. Steering-only route 00000004 raised this frame to the best current measured steering feedback candidate: raw bytes 2-3 correlate strongest in the full raw scan, idle near zero with the i4-compatible scale, and span about -590..+595 deg on deliberate left/right steering sweeps. Keep it as the best current live steering-wheel-angle source, while still noting that the exact OEM signal name versus nearby EPS/front-axle status channels remains open.";
+ SG_ PTCAN_STEERING_WHEEL_ANGLE_I3_CAL : 16|16@1+ (0.03540,-1159.28) [-720|720] "deg" BMW_I3
+CM_ BO_ 770 "Primary PT-CAN steering-wheel-angle candidate on CAN src 2. Raw bytes 2-3 still correlate strongest in the full raw scan and remain the best current live steering feedback source on the i3. Current linear scale is centered around raw ~32748 and validated live against about +/-180 deg wheel checkpoints, with raw 37850 ~= +180 deg and raw 27677 ~= -180 deg. Keep the exact OEM signal name and final physical scaling open until a dedicated visual steering calibration route confirms the mapping.";
 
 BO_ 796 PTCAN_BRAKE_PRESSED_CANDIDATE: 8 BMW_I3
  SG_ BRAKE_PRESSED_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3

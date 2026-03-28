@@ -258,7 +258,7 @@ class CarState(CarStateBase):
     # PT-CAN 770 is the best current live steering-wheel-angle source on the i3.
     pt_steering = cp_can.vl.get("PTCAN_STEERING_WHEEL_CANDIDATE", {})
     self.ptcan_steering_raw = int(pt_steering.get("PTCAN_STEERING_WHEEL_RAW", 0))
-    pt_steering_deg = float(pt_steering.get("PTCAN_STEERING_WHEEL_ANGLE_I4_COMPAT", 0.0))
+    pt_steering_deg = float(pt_steering.get("PTCAN_STEERING_WHEEL_ANGLE_I3_CAL", 0.0))
     pt_steering_companion = cp_can.vl.get("PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE", {})
     self.ptcan_steering_companion_raw = int(pt_steering_companion.get("PTCAN_STEERING_WHEEL_COMPANION_RAW", 0))
     ret.steeringAngleDeg = pt_steering_deg

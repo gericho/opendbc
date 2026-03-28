@@ -57,11 +57,6 @@ BO_ 49 STEER_TORQUE: 17 BMW_I3
  SG_ STEER_TORQUE_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ BO_ 49 "Confirmed steering-torque helper. BMW-style driver torque lives in the 24|12 field and is valid on the cycle-0 subframe. CarState uses this path for steeringTorque/steeringPressed.";
 
-BO_ 51 EPS_ANGLE: 17 BMW_I3
- SG_ STEERING_ANGLE_RAW : 8|16@1- (0.1,0) [-1000|1000] "deg" BMW_I3
- SG_ EPS_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 51 "Historical FlexRay EPS-angle helper. Live i3 routes still show this frame moving with steering activity, but dedicated steering-only route 00000004 and direct comparison against PT-CAN frame 770 show that 51 behaves like a wrapped or otherwise non-direct EPS/internal angle proxy rather than the best clean steering-wheel-angle source. Keep it documented for EPS-state correlation and reverse work, but prefer PT-CAN 770 as the primary live steering-wheel-angle feedback candidate.";
-
 BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
  SG_ VEHICLE_SPEED_CYCLE_RAW M : 0|2@1+ (1,0) [0|3] "" BMW_I3
  SG_ VEHICLE_SPEED_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3

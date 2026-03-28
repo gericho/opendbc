@@ -32,14 +32,6 @@ class CarState(CarStateBase):
     53: {"direction": "R_high", "left": 62.5, "center": 216.0, "right": 236.5, "confidence": "low"},
   }
 
-  @staticmethod
-  def _decode_eps_angle(angle_raw: float) -> float:
-    # Live routes show frame 51 behaving like a wrapped steering-wheel angle
-    # rather than a clean signed +-1000 deg signal. Re-center it to the nearest
-    # turn within a practical steering-wheel range until the final DBC formula
-    # is closed mathematically.
-    return ((float(angle_raw) + 512.0) % 1024.0) - 512.0
-
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     super().__init__(CP, CP_SP)
     self.shifter_values = CANDefine(DBC[CP.carFingerprint][Bus.pt]).dv.get("DRIVE_STATE_EXPERIMENTAL", {})
@@ -119,6 +111,8 @@ class CarState(CarStateBase):
     self.stock_lat_dir_confidence = "none"
     self.stock_lat_mag_hint = 0.0
     self.stock_lat_mag_confidence = "none"
+    self.ptcan_steering_raw = 0
+    self.ptcan_steering_companion_raw = 0
 
   @staticmethod
   def _stock_lat_dir_from_phase_b1(phase: int, b1: int) -> tuple[str, str]:
@@ -261,8 +255,13 @@ class CarState(CarStateBase):
     ret.vEgoCluster = ret.vEgoRaw
     ret.standstill = ret.vEgoRaw < 0.1
 
-    eps_angle_raw = float(cp_flexray.vl.get("EPS_ANGLE", {}).get("STEERING_ANGLE_RAW", 0.0))
-    ret.steeringAngleDeg = self._decode_eps_angle(eps_angle_raw)
+    # PT-CAN 770 is the best current live steering-wheel-angle source on the i3.
+    pt_steering = cp_can.vl.get("PTCAN_STEERING_WHEEL_CANDIDATE", {})
+    self.ptcan_steering_raw = int(pt_steering.get("PTCAN_STEERING_WHEEL_RAW", 0))
+    pt_steering_deg = float(pt_steering.get("PTCAN_STEERING_WHEEL_ANGLE_I4_COMPAT", 0.0))
+    pt_steering_companion = cp_can.vl.get("PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE", {})
+    self.ptcan_steering_companion_raw = int(pt_steering_companion.get("PTCAN_STEERING_WHEEL_COMPANION_RAW", 0))
+    ret.steeringAngleDeg = pt_steering_deg
     steer_torque = cp_flexray.vl.get("STEER_TORQUE", {})
     self.long_helper_49_wa = int(steer_torque.get("STEER_TORQUE_RAW_WORD_A", 0))
     self.long_helper_49_wb = int(steer_torque.get("STEER_TORQUE_RAW_WORD_B", 0))
@@ -504,7 +503,6 @@ class CarState(CarStateBase):
     cam_messages = [
       ("WHEEL_SPEED", float("nan")),
       ("STEER_TORQUE", float("nan")),
-      ("EPS_ANGLE", float("nan")),
       ("VEHICLE_SPEED_PROV", float("nan")),
       ("DYNAMICS_YAW_PROV", float("nan")),
       ("LONG_STATE_HELPER_D", float("nan")),
@@ -520,6 +518,8 @@ class CarState(CarStateBase):
     ]
     party_messages = [
       ("PTCAN_ACCELERATOR_CANDIDATE", float("nan")),
+      ("PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE", float("nan")),
+      ("PTCAN_STEERING_WHEEL_CANDIDATE", float("nan")),
       ("PTCAN_CRUISE_BUTTONS_AUX", float("nan")),
       ("PTCAN_BRAKE_PRESSED_CANDIDATE", float("nan")),
       ("PTCAN_BRAKE_PEDAL_CANDIDATE", float("nan")),

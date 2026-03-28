@@ -60,7 +60,7 @@ BO_ 49 STEER_TORQUE: 17 BMW_I3
 BO_ 51 EPS_ANGLE: 17 BMW_I3
  SG_ STEERING_ANGLE_RAW : 8|16@1- (0.1,0) [-1000|1000] "deg" BMW_I3
  SG_ EPS_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 51 "Confirmed EPS-angle helper. Live i3 routes show this frame behaving like a wrapped steering-wheel angle rather than a clean signed +-1000 deg signal. CarState currently recenters the raw value into a practical steering-wheel range for live use while the final mathematical DBC formula remains open.";
+CM_ BO_ 51 "Historical FlexRay EPS-angle helper. Live i3 routes still show this frame moving with steering activity, but dedicated steering-only route 00000004 and direct comparison against PT-CAN frame 770 show that 51 behaves like a wrapped or otherwise non-direct EPS/internal angle proxy rather than the best clean steering-wheel-angle source. Keep it documented for EPS-state correlation and reverse work, but prefer PT-CAN 770 as the primary live steering-wheel-angle feedback candidate.";
 
 BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
  SG_ VEHICLE_SPEED_CYCLE_RAW M : 0|2@1+ (1,0) [0|3] "" BMW_I3
@@ -388,10 +388,15 @@ BO_ 415 PTCAN_CRUISE_BUTTONS_MAIN: 8 BMW_I3
  SG_ CRUISE_BTN_MAIN_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 415 "Primary PT-CAN cruise-button frame. Bytes 2-3 changed cleanly across SET, RES, and distance-button presses with stable idle values, making this the best current main cruise-button source on CAN src 2. Current CarState uses this frame for SET/RES button events; +/- speed and distance semantics remain unresolved.";
 
+BO_ 769 PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE: 7 BMW_I3
+ SG_ PTCAN_STEERING_WHEEL_COMPANION_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ PTCAN_STEERING_WHEEL_COMPANION_ANGLE_I4_COMPAT : 16|16@1+ (0.04375,-1433.6) [0|1433.55625] "deg" BMW_I3
+CM_ BO_ 769 "Low-rate PT-CAN steering-angle companion on CAN src 2. Steering-only route 00000004 shows this frame tracks the same centered angle family as 770 with the same i4-compatible scale, but at about 5 Hz and with smaller observed extrema (~-458..+462 deg versus 770 at ~-590..+595 deg). Treat 770 as the primary live steering-wheel-angle feedback and 769 as a decimated/filtered companion until the exact BMW semantic split is confirmed.";
+
 BO_ 770 PTCAN_STEERING_WHEEL_CANDIDATE: 7 BMW_I3
  SG_ PTCAN_STEERING_WHEEL_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ PTCAN_STEERING_WHEEL_ANGLE_I4_COMPAT : 16|16@1+ (0.04375,-1433.6) [0|1433.55625] "deg" BMW_I3
-CM_ BO_ 770 "Raw PT-CAN steering-wheel-angle helper aligned with the smnogar BMW KCAN DBC. The frame is present strongly on recent i3 routes, but the smnogar i4 scaling does not map directly to the i3 EPS angle yet. Keep this as a raw/helper-only candidate for future lateral/TJA fitting rather than a closed steering-angle source.";
+CM_ BO_ 770 "Primary PT-CAN steering-wheel-angle helper on CAN src 2. Steering-only route 00000004 raised this frame to the best current measured steering feedback candidate: raw bytes 2-3 correlate strongest in the full raw scan, idle near zero with the i4-compatible scale, and span about -590..+595 deg on deliberate left/right steering sweeps. Keep it as the best current live steering-wheel-angle source, while still noting that the exact OEM signal name versus nearby EPS/front-axle status channels remains open.";
 
 BO_ 796 PTCAN_BRAKE_PRESSED_CANDIDATE: 8 BMW_I3
  SG_ BRAKE_PRESSED_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3

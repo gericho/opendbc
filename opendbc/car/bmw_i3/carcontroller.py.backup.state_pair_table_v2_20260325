@@ -20,62 +20,54 @@ class CarController(CarControllerBase):
   LATERAL_FORCE_WEAKEN_BP = [22.0, 31.0]
   LATERAL_FORCE_WEAKEN_V = [250.0, 250.0]
   LONG_PAIR_TABLE = {
-    ("ACC_ARMED_POSITIVE_PULL", "positive"): {
-      "families": [
-        (bytes.fromhex("3a00000000000000000000000000000000"), bytes.fromhex("3a96f99a7fd37e2fffffffffffffffffff")),
-        (bytes.fromhex("0c00000000000000000000000000000000"), bytes.fromhex("0cf6f10280ff7f2fffffffffffffffffff")),
-      ],
-    },
-    ("ACC_ARMED_POSITIVE_LOW", "positive"): {
-      "families": [
-        (bytes.fromhex("37fff416ee6eef8ef346f52222844cc8ff"), bytes.fromhex("3700000000000000000000000000000000")),
-        (bytes.fromhex("37fff7c3c95cd12f0a5e152222522665ff"), bytes.fromhex("3700000000000000000000000000000000")),
-        (bytes.fromhex("0600000000000000000000000000000000"), bytes.fromhex("0682fe057f62802fffffffffffffffffff")),
-      ],
-    },
-    ("ACC_ARMED_NEUTRAL", "neutral"): {
-      "families": [
-        (bytes.fromhex("3e00000000000000000000000000000000"), bytes.fromhex("3e07fe8c89ff7f2fffffffffffffffffff")),
-        (bytes.fromhex("2e00000000000000000000000000000000"), bytes.fromhex("2efbf27a80ff7f2fffffffffffffffffff")),
-      ],
-    },
-    ("MANAGED_NEUTRAL_IDLE", "neutral"): {
-      "families": [
-        (bytes.fromhex("1000000000000000000000000000000000"), bytes.fromhex("1100000000000000000000000000000000")),
-        (bytes.fromhex("2000000000000000000000000000000000"), bytes.fromhex("2100000000000000000000000000000000")),
-        (bytes.fromhex("0400000000000000000000000000000000"), bytes.fromhex("0500000000000000000000000000000000")),
-        (bytes.fromhex("0a00000000000000000000000000000000"), bytes.fromhex("0a2bf6ff7ffe7f2fffffffffffffffffff")),
-        (bytes.fromhex("3800000000000000000000000000000000"), bytes.fromhex("3900000000000000000000000000000000")),
-      ],
-    },
-    ("ACC_ARMED_NEGATIVE", "negative"): {
-      "families": [
-        (bytes.fromhex("0000000000000000000000000000000000"), bytes.fromhex("00d9f95981ff7f2fffffffffffffffffff")),
-        (bytes.fromhex("1600000000000000000000000000000000"), bytes.fromhex("1629f10780ff7f2fffffffffffffffffff")),
-      ],
-    },
-    ("UNKNOWN_NEGATIVE", "negative"): {
-      "families": [
-        (bytes.fromhex("3c00000000000000000000000000000000"), bytes.fromhex("3c95f3837fff7f2fffffffffffffffffff")),
-        (bytes.fromhex("2bfff10000000000000000000000000000"), bytes.fromhex("2b00000000000000000000000000000000")),
-      ],
-    },
-    ("ACC_ARMED_BLENDED", "blended"): {
-      "families": [
-        (bytes.fromhex("3600000000000000000000000000000000"), bytes.fromhex("366bf13485ff7f2fffffffffffffffffff")),
-        (bytes.fromhex("1200000000000000000000000000000000"), bytes.fromhex("12e9fba980a07e2fffffffffffffffffff")),
-        (bytes.fromhex("3dfc470aff07007efffffffffffffff899"), bytes.fromhex("3d00000000000000000000000000000000")),
-        (bytes.fromhex("3600000000000000000000000000000000"), bytes.fromhex("3678f7f27cf2812fffffffffffffffffff")),
-      ],
-    },
-    ("MANAGED_BLENDED", "blended"): {
-      "families": [
-        (bytes.fromhex("1bfffcca46b84def834e8e2222211552ff"), bytes.fromhex("1b00000000000000000000000000000000")),
-        (bytes.fromhex("0dff2701ff07007ffffffffffffffff8e4"), bytes.fromhex("0d00000000000000000000000000000000")),
-        (bytes.fromhex("3200000000000000000000000000000000"), bytes.fromhex("32def64e7f62802fffffffffffffffffff")),
-        (bytes.fromhex("0400000000000000000000000000000000"), bytes.fromhex("0500000000000000000000000000000000")),
-      ],
-    },
+    ("ACC_ARMED_POSITIVE_PULL", "positive"): (
+      bytes.fromhex("3a00000000000000000000000000000000"),
+      bytes.fromhex("3a96f99a7fd37e2fffffffffffffffffff"),
+      bytes.fromhex("0c00000000000000000000000000000000"),
+      bytes.fromhex("0cf6f10280ff7f2fffffffffffffffffff"),
+    ),
+    ("ACC_ARMED_POSITIVE_LOW", "positive"): (
+      bytes.fromhex("37fff416ee6eef8ef30000000000000000"),
+      bytes.fromhex("3700000000000000000000000000000000"),
+      bytes.fromhex("0600000000000000000000000000000000"),
+      bytes.fromhex("0682fe057f62802fffffffffffffffffff"),
+    ),
+    ("ACC_ARMED_NEUTRAL", "neutral"): (
+      bytes.fromhex("3e00000000000000000000000000000000"),
+      bytes.fromhex("3e07fe8c89ff7f2fffffffffffffffffff"),
+      bytes.fromhex("2e00000000000000000000000000000000"),
+      bytes.fromhex("2efbf27a80ff7f2fffffffffffffffffff"),
+    ),
+    ("MANAGED_NEUTRAL_IDLE", "neutral"): (
+      bytes.fromhex("1dfe2701ff07007eff0000000000000000"),
+      bytes.fromhex("1d00000000000000000000000000000000"),
+      bytes.fromhex("10ff2701fe07007fff0000000000000000"),
+      bytes.fromhex("1100000000000000000000000000000000"),
+    ),
+    ("ACC_ARMED_NEGATIVE", "negative"): (
+      bytes.fromhex("0000000000000000000000000000000000"),
+      bytes.fromhex("00d9f95981ff7f2fffffffffffffffffff"),
+      bytes.fromhex("1600000000000000000000000000000000"),
+      bytes.fromhex("1629f10780ff7f2fffffffffffffffffff"),
+    ),
+    ("UNKNOWN_NEGATIVE", "negative"): (
+      bytes.fromhex("3c00000000000000000000000000000000"),
+      bytes.fromhex("3c95f3837fff7f2fffffffffffffffffff"),
+      bytes.fromhex("2bfff10000000000000000000000000000"),
+      bytes.fromhex("2b00000000000000000000000000000000"),
+    ),
+    ("ACC_ARMED_BLENDED", "blended"): (
+      bytes.fromhex("3600000000000000000000000000000000"),
+      bytes.fromhex("367ef1a380ff7f2fffffffffffffffffff"),
+      bytes.fromhex("12e9fba980a07e2fff0000000000000000"),
+      bytes.fromhex("1200000000000000000000000000000000"),
+    ),
+    ("MANAGED_BLENDED", "blended"): (
+      bytes.fromhex("11002801ff07007fff0000000000000000"),
+      bytes.fromhex("1100000000000000000000000000000000"),
+      bytes.fromhex("3200000000000000000000000000000000"),
+      bytes.fromhex("32def64e7f62802fffffffffffffffffff"),
+    ),
   }
   LONG_PAIR_FALLBACK_BY_INTENT = {
     "positive": ("ACC_ARMED_POSITIVE_PULL", "positive"),
@@ -83,6 +75,7 @@ class CarController(CarControllerBase):
     "negative": ("ACC_ARMED_NEGATIVE", "negative"),
     "blended": ("ACC_ARMED_BLENDED", "blended"),
   }
+
   def __init__(self, dbc_names, CP, CP_SP):
     super().__init__(dbc_names, CP, CP_SP)
     # Shadow-only builder based on the existing BMW SP2018 ACC/72 method.
@@ -147,33 +140,16 @@ class CarController(CarControllerBase):
     stock_state = str(getattr(CS, "stock_long_state_fine", "unknown"))
     stock_intent = str(getattr(CS, "stock_long_intent", "unknown"))
     key = (stock_state, stock_intent)
-    pair_entry = self.LONG_PAIR_TABLE.get(key)
+    pair = self.LONG_PAIR_TABLE.get(key)
     pair_source = f"{stock_state}|{stock_intent}|primary"
-    if pair_entry is None:
+    if pair is None:
       fallback_key = self.LONG_PAIR_FALLBACK_BY_INTENT.get(stock_intent, ("ACC_ARMED_NEUTRAL", "neutral"))
-      pair_entry = self.LONG_PAIR_TABLE[fallback_key]
+      pair = self.LONG_PAIR_TABLE[fallback_key]
       pair_source = f"{fallback_key[0]}|{fallback_key[1]}|fallback"
-    families = pair_entry["families"]
-    live_54 = bytes(getattr(CS, "long_54_stock_template", b""))
-    live_59 = bytes(getattr(CS, "long_59_stock_template", b""))
-    live_phase54 = int(getattr(CS, "long_54_phase", 0)) & 0xFF
-    live_phase59 = int(getattr(CS, "long_59_phase", 0)) & 0xFF
-
-    def score_family(pair54: bytes, pair59: bytes) -> tuple[int, int, int]:
-      # Prefer exact phase alignment first, then matching trailing bytes against
-      # the rolling stock templates. This lets managed/blended states choose the
-      # closest real family instead of a single hardcoded pair per state.
-      phase_score = int(pair54[0] == live_phase54) + int(pair59[0] == live_phase59)
-      suffix54 = sum(1 for a, b in zip(pair54[1:], live_54[1:]) if a == b) if len(live_54) == len(pair54) else 0
-      suffix59 = sum(1 for a, b in zip(pair59[1:], live_59[1:]) if a == b) if len(live_59) == len(pair59) else 0
-      return (phase_score, suffix54 + suffix59, suffix59)
-
-    best_idx, best_pair, best_score = 0, families[0], score_family(*families[0])
-    for idx, pair in enumerate(families[1:], start=1):
-      score = score_family(*pair)
-      if score > best_score:
-        best_idx, best_pair, best_score = idx, pair, score
-    return best_pair[0], best_pair[1], f"{pair_source}|fam{best_idx}"
+    use_fallback = stock_state.startswith("MANAGED_") and pair[2] and pair[3]
+    if use_fallback:
+      return pair[2], pair[3], pair_source.replace("|primary", "|alt")
+    return pair[0], pair[1], pair_source
 
   def _build_shadow_long_tx(self, CS, long_tx_hint: dict[str, int | str]) -> dict[str, int | str]:
     tx54_phase = int(getattr(CS, "long_54_phase", 0))
@@ -251,7 +227,7 @@ class CarController(CarControllerBase):
     b1 = int(getattr(CS, "stock_lat96_b1", 0))
     b2 = int(getattr(CS, "stock_lat96_b2", 0))
     b3 = int(getattr(CS, "stock_lat96_b3", 0))
-    if CC.latActive and dir_hint in ("left", "right"):
+    if CC.latActive and dir_hint != "unknown":
       delta = int(round(24.0 * mag))
       b1 = min(255, b1 + delta) if dir_hint == "right" else max(0, b1 - delta)
     tx72 = self._build_lateral_frame72(phase, cnt)

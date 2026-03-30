@@ -37,10 +37,6 @@ BU_: BMW_I3
 CM_ "Draft DBC derived from BMW i3 FlexRay and PT-CAN logs. Address 27 was not observed in any uploaded segment. Signals below intentionally mix three classes: confirmed parse signals already used by CarState, state/proxy helpers useful for reverse engineering, and unresolved TX candidates kept for shadow-debug correlation.";
 
 BO_ 46 WHEEL_SPEED: 17 BMW_I3
- SG_ WHEEL_SPEED_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ WHEEL_SPEED_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ WHEEL_SPEED_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ WHEEL_SPEED_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ RL_SPEED_RAW : 24|16@1+ (0.015625,-511.984375) [0|65535] "kph" BMW_I3
  SG_ RR_SPEED_RAW : 40|16@1+ (0.015625,-511.984375) [0|65535] "kph" BMW_I3
  SG_ FL_SPEED_RAW : 56|16@1+ (0.015625,-511.984375) [0|65535] "kph" BMW_I3
@@ -49,30 +45,23 @@ BO_ 46 WHEEL_SPEED: 17 BMW_I3
 
 BO_ 49 STEER_TORQUE: 17 BMW_I3
  SG_ STEER_TORQUE_CYCLE_RAW : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ STEER_TORQUE_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ STEER_TORQUE_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ STEER_TORQUE_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ STEER_TORQUE_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ DRIVER_STEER_TORQUE_BMW : 24|12@1+ (0.005,-10) [-10|10.475] "Nm" BMW_I3
  SG_ STEER_TORQUE_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ BO_ 49 "Confirmed steering-torque helper. BMW-style driver torque lives in the 24|12 field and is valid on the cycle-0 subframe. CarState uses this path for steeringTorque/steeringPressed.";
 
+BO_ 51 EPS_ANGLE: 17 BMW_I3
+ SG_ STEERING_ANGLE_RAW : 8|16@1- (0.1,0) [-1000|1000] "deg" BMW_I3
+ SG_ EPS_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 51 "Confirmed EPS-angle helper. Live i3 routes show this frame behaving like a wrapped steering-wheel angle rather than a clean signed +-1000 deg signal. CarState currently recenters the raw value into a practical steering-wheel range for live use while the final mathematical DBC formula remains open.";
+
 BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
  SG_ VEHICLE_SPEED_CYCLE_RAW M : 0|2@1+ (1,0) [0|3] "" BMW_I3
- SG_ VEHICLE_SPEED_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ VEHICLE_SPEED_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ VEHICLE_SPEED_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ VEHICLE_SPEED_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ LONG_ACCEL_RAW m0 : 24|16@1+ (0.002,-65) [0|65535] "" BMW_I3
  SG_ VEHICLE_SPEED_BMW m3 : 24|16@1+ (0.015625,0) [0|65535] "kph" BMW_I3
  SG_ DRIVING_STATUS_BMW m3 : 44|2@1+ (1,0) [0|7] "" BMW_I3
  CM_ BO_ 55 "Confirmed primary vehicle-speed source aligned with the BMW SP2018 multiplexed layout. CarState now consumes the m3 vehicle-speed subframe and keeps frame 46 only as fallback/support.";
 
 BO_ 56 DYNAMICS_YAW_PROV: 17 BMW_I3
- SG_ DYNAMICS_YAW_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ DYNAMICS_YAW_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ DYNAMICS_YAW_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ DYNAMICS_YAW_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ YAW_RATE_RAW_A : 8|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
  SG_ YAW_RATE_RAW_B : 24|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
  CM_ BO_ 56 "Confirmed vehicle-dynamics helper. Raw yaw fields are used for reverse-engineering correlation, especially while comparing stock lateral behavior against shadow steering logic.";
@@ -147,19 +136,8 @@ BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ SG_ 43 CHASSIS_STATE_A "Experimental secondary dynamic-state frame. It follows longitudinal phase changes across 00000054/55/b3, but is still weaker than 59 and 54 for isolating stock ACC content.";
 
-BO_ 63 LONG_STATE_HELPER_D: 17 BMW_I3
- SG_ LONG_STATE_HELPER_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_STATE_HELPER_D_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_STATE_HELPER_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_STATE_HELPER_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 63 "Raw helper added after route 000003d0 showed src1/63 as one of the strongest discriminants for stock longitudinal frame families 54/59. Keep read-only for state-machine closure; do not treat as a direct accel command.";
-
 BO_ 93 ACC_TJA_OLD_ROUTE_HELPER_A: 17 BMW_I3
  SG_ ACC_TJA_OLD_A_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LONG_STATE_HELPER_A_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_STATE_HELPER_A_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_STATE_HELPER_A_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_STATE_HELPER_A_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -174,10 +152,10 @@ BO_ 96 LAT_STOCK_TX_PAYLOAD_CANDIDATE: 9 BMW_I3
  SG_ LAT_STOCK_TX_PAYLOAD_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_TX_PAYLOAD_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_TX_PAYLOAD_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 96 "Primary lateral TX payload candidate. Routes 000000e9 and 000000ea provide the first labeled left/right windows; route 00000176 added dense managed-TJA coverage; route 00000402 (2026-03-27 TJA-only labeling pass) tightened the current practical decoder. Across all of them, src0/96 changes coherently during assisted-steering windows while src0/72 behaves like the outer TX phase/counter envelope. Current best practical decoder is phase-local on (72.byte0, 96.byte1), not a global scale in degrees. High-value phases where right means higher byte1 (R_high): phase 57 L/C/R ~ 63/174.5/236, phase 35 ~ 99/174.5/236, phase 49 ~ 81/175/217, phase 46 ~ 99/157/216. High-value phases where right means lower byte1 (R_low): phase 58 ~ 196.5/174.5/62, phase 25 ~ 176.5/110/62. Treat 96.byte2 as secondary torque/intensity-like support only. This frame remains the best current candidate for the actual stock lateral TX payload, but full command semantics are still unresolved.";
+CM_ BO_ 96 "Primary lateral TX payload candidate. Routes 000000e9 and 000000ea provide the labeled left/right windows; route 00000176 adds dense managed-TJA support coverage. Across all of them, src0/96 changes coherently during assisted-steering windows while src0/72 behaves like the outer TX phase/counter envelope. Current pragmatic phase-local classifier on byte1 remains: phase 60 threshold ~112 right_gt_left (high confidence), phase 24 threshold ~81 right_gt_left (medium), phase 8 threshold ~150 right_gt_left (medium). This frame remains the best current candidate for the actual stock lateral TX payload, but full command semantics are still unresolved.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_0 "Secondary phase/family byte inside the current best lateral TX payload frame. Useful for phase-local grouping together with frame 72 and byte1.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_1 "Best current direction-discriminating byte in the stock lateral TX payload. Decode only phase-locally with 72.byte0. Current strongest phases from route 00000402 are: R_high -> phase 57 (L/C/R ~ 63/174.5/236), phase 35 (99/174.5/236), phase 49 (81/175/217), phase 46 (99/157/216); R_low -> phase 58 (196.5/174.5/62), phase 25 (176.5/110/62). Do not treat byte1 as a global signed angle scale; the same numeric direction flips across phase families.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_2 "Auxiliary payload byte that moves with steering activity but is not yet isolated as a standalone signed magnitude. Relative to dynm/smnogar BMW SP2018 references, byte2 is the best current i3 candidate for a torque/intensity-like companion to byte1, but it is weaker than byte1 and should not be used as the primary direction discriminator.";
+CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_1 "Best current direction-discriminating byte in the stock lateral TX payload. Current pragmatic classifier is phase-local only: phase 60 threshold ~112 right_gt_left, phase 24 threshold ~81 right_gt_left, phase 8 threshold ~150 right_gt_left. Current runtime also derives a normalized magnitude hint from byte1, but only phase 60 is strong enough to treat as high-confidence; phases 24 and 8 remain low-confidence support only.";
+CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_2 "Auxiliary payload byte that moves with steering activity but is not yet isolated as a standalone signed magnitude.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_3 "Payload-support byte that remains structurally stable across many managed windows. Useful for identifying fixed-vs-dynamic portions of frame 96.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_4 "Payload-support byte that remains structurally stable across many managed windows. Useful for identifying fixed-vs-dynamic portions of frame 96.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_8 "Tail byte in the current best lateral TX payload frame. Keep as raw structural content until checksum/counter separation is proven.";
@@ -261,7 +239,7 @@ BO_ 131 ACC_TJA_OLD_ROUTE_HELPER_D: 17 BMW_I3
  SG_ ACC_TJA_OLD_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_GATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_LONG_GATE_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 131 "Primary longitudinal state/gate helper. Legacy routes and the current three-way comparison set 000003ff (manual), 00000400 (ACC-only), and 00000402 (ACC+TJA) confirm that 131 separates manual-driving families from ACC/TJA session families, but does not by itself cleanly split ACC-only from TJA. Manual families still sit in the older ...9883/ba83/b98302ffff space, while both ACC-only and TJA move into the newer ...00000effff / ...7c-7f8002ffff family. Treat 131 as the coarse ACC/TJA family gate, not the final TJA discriminator.";
+CM_ BO_ 131 "Primary longitudinal state/gate helper. Across legacy TJA routes 00000054/55/56, modern ACC-only route 000000b3, and recent ACC-only route 00000147, this frame separates OFF (643), ACC base armed/ready state (3584), transition into managed (640 with 135=26850), and managed/following assist states (640/656 with 135=24802). Best current gate/state coarse indicator for stock ACC behavior.";
 
 BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -271,7 +249,7 @@ BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_LONG_MAIN_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 135 "Primary longitudinal main-state helper and best current live discriminator between manual / ACC-only / ACC+TJA families. In the current route set 000003ff (manual), 00000400 (ACC-only), and 00000402 (ACC+TJA), manual stays in the ...22e0e188a205 family, ACC-only moves to ...2228e260a205, and ACC+TJA moves to ...2228e2604206 or nearby ...e2403206 / ...e2683204 variants during managed steering. Use 135 together with 131 when classifying live stock context; 135 is the practical split between ACC-only and TJA-family operation.";
+CM_ BO_ 135 "Primary longitudinal main-state helper. Across legacy TJA routes 00000054/55/56, modern ACC-only route 000000b3, and recent ACC-only route 00000147, this frame separates OFF (35041), ACC base armed/ready state (16610), transition into managed (26850), and managed/following assist state (24802). Best current stock ACC state indicator.";
 
 BO_ 241 ACC_TJA_OLD_ROUTE_HELPER_F: 17 BMW_I3
  SG_ ACC_TJA_OLD_F_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -383,15 +361,10 @@ BO_ 415 PTCAN_CRUISE_BUTTONS_MAIN: 8 BMW_I3
  SG_ CRUISE_BTN_MAIN_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 415 "Primary PT-CAN cruise-button frame. Bytes 2-3 changed cleanly across SET, RES, and distance-button presses with stable idle values, making this the best current main cruise-button source on CAN src 2. Current CarState uses this frame for SET/RES button events; +/- speed and distance semantics remain unresolved.";
 
-BO_ 769 PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE: 7 BMW_I3
- SG_ PTCAN_STEERING_WHEEL_COMPANION_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ PTCAN_STEERING_WHEEL_COMPANION_ANGLE_I3_CAL : 16|16@1+ (0.03540,-1159.28) [-720|720] "deg" BMW_I3
-CM_ BO_ 769 "Low-rate PT-CAN steering-angle companion on CAN src 2. Treat 770 as the primary live steering-wheel-angle feedback and 769 as a decimated/filtered companion. Current linear scale is centered around raw ~32748 and validated live against about +/-180 deg wheel checkpoints, with raw 37850 ~= +180 deg and raw 27677 ~= -180 deg. Keep the exact OEM semantic split between 769 and 770 open until a dedicated visual steering calibration route confirms the final mapping.";
-
 BO_ 770 PTCAN_STEERING_WHEEL_CANDIDATE: 7 BMW_I3
  SG_ PTCAN_STEERING_WHEEL_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ PTCAN_STEERING_WHEEL_ANGLE_I3_CAL : 16|16@1+ (0.03540,-1159.28) [-720|720] "deg" BMW_I3
-CM_ BO_ 770 "Primary PT-CAN steering-wheel-angle candidate on CAN src 2. Raw bytes 2-3 still correlate strongest in the full raw scan and remain the best current live steering feedback source on the i3. Current linear scale is centered around raw ~32748 and validated live against about +/-180 deg wheel checkpoints, with raw 37850 ~= +180 deg and raw 27677 ~= -180 deg. Keep the exact OEM signal name and final physical scaling open until a dedicated visual steering calibration route confirms the mapping.";
+ SG_ PTCAN_STEERING_WHEEL_ANGLE_I4_COMPAT : 16|16@1+ (0.04375,-1433.6) [0|1433.55625] "deg" BMW_I3
+CM_ BO_ 770 "Raw PT-CAN steering-wheel-angle helper aligned with the smnogar BMW KCAN DBC. The frame is present strongly on recent i3 routes, but the smnogar i4 scaling does not map directly to the i3 EPS angle yet. Keep this as a raw/helper-only candidate for future lateral/TJA fitting rather than a closed steering-angle source.";
 
 BO_ 796 PTCAN_BRAKE_PRESSED_CANDIDATE: 8 BMW_I3
  SG_ BRAKE_PRESSED_RAW_PT_CAN : 0|16@1+ (1,0) [0|65535] "" BMW_I3

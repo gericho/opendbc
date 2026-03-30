@@ -10,7 +10,7 @@ from opendbc.car.bmw.values import CarControllerParams
 
 class CarController(CarControllerBase):
   ENABLE_LONG_TX_BUILDER = True
-  ENABLE_LATERAL_TX_BUILDER = False
+  ENABLE_LATERAL_TX_BUILDER = True
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -224,46 +224,43 @@ class CarController(CarControllerBase):
       "tx_desired_accel": desired_accel,
     }
 
-  @staticmethod
-  def _build_lateral_frame72(phase: int, cnt: int, byte8: int = 0xE0) -> bytes:
-    payload = bytearray([0] * 17)
-    payload[0] = phase & 0xFF
-    payload[2] = (0xF << 4) | (cnt & 0xF)
-    payload[8] = byte8 & 0xFF
-    return bytes(payload)
-
-  @staticmethod
-  def _build_lateral_frame96(phase: int, b1: int, b2: int, b3: int, b4: int = 0, b8: int = 0) -> bytes:
-    payload = bytearray([0] * 9)
-    payload[0] = phase & 0xFF
-    payload[1] = b1 & 0xFF
-    payload[2] = b2 & 0xFF
-    payload[3] = b3 & 0xFF
-    payload[4] = b4 & 0xFF
-    payload[8] = b8 & 0xFF
-    return bytes(payload)
-
-  def _build_shadow_lateral_tx(self, CC, CS):
-    phase = int(getattr(CS, "stock_lat96_phase", 0))
-    cnt = self.shadow_cnt & 0xF
+  def _build_shadow_lateral_tx(self, CC, CS, desired_angle: float):
+    lat_allowed = bool(CC.latActive)
     dir_hint = str(getattr(CS, "stock_lat_dir_hint", "unknown"))
     mag = float(getattr(CS, "stock_lat_mag_hint", 0.0))
-    b1 = int(getattr(CS, "stock_lat96_b1", 0))
-    b2 = int(getattr(CS, "stock_lat96_b2", 0))
-    b3 = int(getattr(CS, "stock_lat96_b3", 0))
-    if CC.latActive and dir_hint in ("left", "right"):
-      delta = int(round(24.0 * mag))
-      b1 = min(255, b1 + delta) if dir_hint == "right" else max(0, b1 - delta)
-    tx72 = self._build_lateral_frame72(phase, cnt)
-    tx96 = self._build_lateral_frame96(phase, b1, b2, b3)
+    cnt1 = self._next_shadow_cnt()
+    values = {
+      "cycle_count": 1,
+      "crc1": 0,
+      "cnt1": cnt1,
+      "always_0x9": 9,
+      "steering_angle_req": desired_angle,
+      "steer_torque_req": 0.0,
+      "TJA_ready": 0,
+      "assist_mode": 1 if lat_allowed else 0,
+      "wayback_en1_lane_keeping_trigger": 0,
+      "lane_keeping_triggered": 0,
+      "like_assist_torque_reserve": 0xA0 if lat_allowed else 0x00,
+      "constants": 0x03ff17fe,
+      "wayback_en_2": 0,
+      "steering_engaged": 2 if lat_allowed else 0,
+      "maybe_assist_force_enhance": 0xA2,
+      "maybe_assist_force_weaken": 0xFA,
+    }
+    msg = self.shadow_packer.make_can_msg("ACC", 4, values)
+    payload = bytearray(msg[1])
+    payload[1] = self._crc8_j1850(bytes(payload[2:]))
+    values["crc1"] = payload[1]
+    self.last_shadow_acc_values = values
+    self.last_shadow_acc_bytes = bytes(payload)
     return {
-      "lat_phase": phase,
+      "lat_phase": int(getattr(CS, "stock_lat72_phase", 0)),
       "lat_dir_hint": dir_hint,
       "lat_mag_hint": mag,
       "lat_tx_enabled": self.enable_lateral_tx_builder,
-      "lat_tx_msg_count": 2 if self.enable_lateral_tx_builder and CC.latActive else 0,
-      "tx72_hex": tx72.hex(),
-      "tx96_hex": tx96.hex(),
+      "lat_tx_msg_count": 1 if self.enable_lateral_tx_builder and lat_allowed else 0,
+      "tx72_hex": bytes(payload).hex(),
+      "tx96_hex": "",
     }
 
   def _build_lateral_can_msgs(self, CC, lateral_tx):
@@ -271,15 +268,12 @@ class CarController(CarControllerBase):
     if not (self.enable_lateral_tx_builder and lat_allowed):
       return []
     tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
-    tx96 = bytes.fromhex(str(lateral_tx["tx96_hex"]))
     base72 = 0x01
-    base96 = 0x01
     # Firmware injector expects the override dat payload to contain only:
     #   dat[0] = base/phase
     #   dat[1:] = replacement bytes (replace_offset = 0)
     return [
       (72, bytes([base72]) + tx72[:9], 0),
-      (96, bytes([base96]) + tx96[:9], 0),
     ]
 
   def _shadow_force_weaken(self, v_ego: float) -> int:
@@ -311,45 +305,7 @@ class CarController(CarControllerBase):
                                                   True, CarControllerParams, self.VM)
       self.apply_angle_last = desired_angle
 
-      cycle_count = self._next_shadow_cycle()
-      if cycle_count % 4 == 1:
-        cnt1 = self._next_shadow_cnt()
-        angle_error = abs(desired_angle - CS.out.steeringAngleDeg)
-        driver_override = bool(CS.out.steeringPressed)
-        tja_ready = int(CS.out.vEgoRaw > 0.1 and not driver_override and lat_allowed)
-        lat_triggered = int(tja_ready and angle_error > 0.5)
-        steering_engaged = 2 if tja_ready else 1
-        steer_torque_req = self._shadow_steer_torque_req(desired_angle, CS.out.steeringAngleDeg)
-        torque_reserve = self._shadow_torque_reserve(CS.out.steeringTorque)
-        force_weaken = self._shadow_force_weaken(CS.out.vEgoRaw)
-        values = {
-          "cycle_count": cycle_count,
-          "crc1": 0,
-          "cnt1": cnt1,
-          "always_0x9": 9,
-          "steering_angle_req": desired_angle,
-          "steer_torque_req": steer_torque_req,
-          "TJA_ready": tja_ready,
-          # Match the dynm/smnogar/BMW SP2018 method defaults unless route
-          # evidence proves otherwise.
-          "assist_mode": 0,
-          "wayback_en1_lane_keeping_trigger": lat_triggered,
-          "lane_keeping_triggered": lat_triggered,
-          "like_assist_torque_reserve": torque_reserve,
-          "constants": 0x03ff17fe,
-          "wayback_en_2": lat_triggered,
-          "steering_engaged": steering_engaged,
-          "maybe_assist_force_enhance": 0xA2,
-          "maybe_assist_force_weaken": force_weaken,
-        }
-        msg = self.shadow_packer.make_can_msg("ACC", 4, values)
-        payload = bytearray(msg[1])
-        payload[1] = self._crc8_j1850(bytes(payload[2:]))
-        values["crc1"] = payload[1]
-        self.last_shadow_acc_values = values
-        self.last_shadow_acc_bytes = bytes(payload)
-
-    lateral_tx = self._build_shadow_lateral_tx(CC, CS)
+    lateral_tx = self._build_shadow_lateral_tx(CC, CS, desired_angle)
     lateral_can_msgs = self._build_lateral_can_msgs(CC, lateral_tx)
     desired_accel = float(actuators.accel)
     long_tx_hint = self._shadow_long_tx_hint(desired_accel, CS)
@@ -425,8 +381,8 @@ class CarController(CarControllerBase):
       **lateral_tx,
       "lat72_override_hex": lateral_can_msgs[0][1].hex() if lateral_can_msgs else "",
       "lat72_override_base": lateral_can_msgs[0][1][0] if lateral_can_msgs else -1,
-      "lat96_override_hex": lateral_can_msgs[1][1].hex() if len(lateral_can_msgs) > 1 else "",
-      "lat96_override_base": lateral_can_msgs[1][1][0] if len(lateral_can_msgs) > 1 else -1,
+      "lat96_override_hex": "",
+      "lat96_override_base": -1,
       "desired_angle": float(desired_angle),
       "lat_allowed": lat_allowed,
       "stock_acc_lateral_gate": False,

@@ -66,6 +66,8 @@ class CarState(CarStateBase):
     self.stock_acc_button = False
     self.stock_tja_button = False
     self.stock_speed_adjust = False
+    self.stock_acc_button_cnt = 0
+    self.stock_tja_button_cnt = 0
     self.legacy_main_button = 0
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
@@ -124,6 +126,12 @@ class CarState(CarStateBase):
     self.stock_lat72_z72 = 0.0
     self.stock_lat72_signed_state = 0
     self.stock_lat72_state_confidence = "none"
+    self.stock_lat60_phase = 0
+    self.stock_lat60_cmd_phase = 0
+    self.stock_lat60_subframe = 0
+    self.stock_lat72_err3 = 0
+    self.stock_lat72_err4 = 0
+    self.stock_lat72_orbit_match = False
     self.stock_lat96_phase = 0
     self.stock_lat96_b1 = 0
     self.stock_lat96_b2 = 0
@@ -205,6 +213,10 @@ class CarState(CarStateBase):
     if neg_nibble is not None and nibble == neg_nibble:
       return (-1, z72, "medium")
     return (0, z72, "low")
+
+  @staticmethod
+  def _wrap_orbit_err(nibble: int, target: int) -> int:
+    return ((int(nibble) - int(target) + 8) % 16) - 8
 
   @staticmethod
   def _lat_phase_entry(phase: int) -> dict | None:
@@ -378,6 +390,11 @@ class CarState(CarStateBase):
     self.long_helper_93_wc = int(long93.get("LONG_STATE_HELPER_A_WORD_C", 0))
     self.long_helper_93_wd = int(long93.get("LONG_STATE_HELPER_A_WORD_D", 0))
 
+    lat60 = cp_flexray.vl.get("LAT_STOCK_TX_TRIGGER_CANDIDATE", {})
+    self.stock_lat60_phase = int(lat60.get("LAT_STOCK_TRIGGER_PHASE_BYTE_0", 0))
+    self.stock_lat60_cmd_phase = int(lat60.get("LAT_STOCK_TRIGGER_CMD_PHASE", 0))
+    self.stock_lat60_subframe = int(lat60.get("LAT_STOCK_TRIGGER_SUBFRAME_LSB", 0))
+
     lat72 = cp_flexray.vl.get("LAT_STOCK_TX_CANDIDATE", {})
     self.stock_lat72_phase = int(lat72.get("LAT_STOCK_TX_PHASE_BYTE_0", 0))
     self.stock_lat72_cmd_phase = (self.stock_lat72_phase >> 1) & 0x1F
@@ -385,6 +402,9 @@ class CarState(CarStateBase):
     self.stock_lat72_signed_state, self.stock_lat72_z72, self.stock_lat72_state_confidence = self._stock_lat72_discrete_state(
       self.stock_lat72_phase, self.stock_lat72_cnt_nibble,
     )
+    self.stock_lat72_err3 = self._wrap_orbit_err(self.stock_lat72_cnt_nibble, (self.stock_lat72_cmd_phase + 3) & 0x0F)
+    self.stock_lat72_err4 = self._wrap_orbit_err(self.stock_lat72_cnt_nibble, (self.stock_lat72_cmd_phase + 4) & 0x0F)
+    self.stock_lat72_orbit_match = self.stock_lat72_err3 == 0 or self.stock_lat72_err4 == 0
     lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
@@ -453,15 +473,32 @@ class CarState(CarStateBase):
     self.stock_acc_ctrl_gate = stock_ctrl_gate
     self.stock_acc_base_armed = stock_ctrl_state == 16610
     self.stock_assist_advanced = stock_ctrl_state == 24802
-    self.stock_tja_active = self.stock_assist_advanced
+    # Newer realdata routes no longer hold a single rigid 135 family for managed
+    # TJA. Keep the old 24802 path, but also accept the modern branch when the
+    # SAS-side 60->72 burst is alive, 72 is on its expected orbit, and the old
+    # 135 helper is not in the manual/off baseline.
+    stock_tja_modern = (
+      self.stock_lat_active_hint and
+      self.stock_lat72_orbit_match and
+      self.stock_lat60_phase == self.stock_lat72_phase and
+      stock_ctrl_state not in (0, 35041)
+    )
+    self.stock_tja_active = self.stock_assist_advanced or stock_tja_modern
     self.stock_stalk_main_a = stock_stalk_main_a
     self.stock_stalk_main_b = stock_stalk_main_b
     # Legacy route correlation:
     # 30716/65282 -> ACC button family
     # 18684/65283 -> TJA button family
     # 5884/65282  -> speed stalk +/- family
-    self.stock_acc_button = stock_stalk_main_a == 30716 and stock_stalk_main_b == 65282
-    self.stock_tja_button = stock_stalk_main_a == 18684 and stock_stalk_main_b == 65283
+    raw_stock_acc_button = stock_stalk_main_a == 30716 and stock_stalk_main_b == 65282
+    raw_stock_tja_button = stock_stalk_main_a == 18684 and stock_stalk_main_b == 65283
+    # The stalk helper families are observed as short periodic pulses on FlexRay.
+    # Stretch them slightly so UI/engagement logic sees one stable press/release
+    # instead of repeated chattering edges.
+    self.stock_acc_button_cnt = 8 if raw_stock_acc_button else max(self.stock_acc_button_cnt - 1, 0)
+    self.stock_tja_button_cnt = 8 if raw_stock_tja_button else max(self.stock_tja_button_cnt - 1, 0)
+    self.stock_acc_button = self.stock_acc_button_cnt > 0
+    self.stock_tja_button = self.stock_tja_button_cnt > 0
     self.stock_speed_adjust = stock_stalk_main_a == 5884 and stock_stalk_main_b == 65282
 
     # Old and modern ACC-only/TJA routes show the clearest stable states here:
@@ -469,10 +506,25 @@ class CarState(CarStateBase):
     # 16610/3584 -> ACC base armed/ready state
     # 24802/(640 or 656) -> advanced assist state / actual managed-control branch
     acc_enabled = stock_ctrl_state in (16610, 24802)
-    acc_available = acc_enabled or stock_ctrl_gate in (640, 656, 3584)
+    # Keep engagement unblocked on the flexray-only port even when the stock ACC
+    # state machine does not expose a clean PCM-active edge. Presence of the stock
+    # control helpers or a legacy ACC/TJA button press is enough to treat the
+    # system as available for openpilot button-based enable.
+    acc_available = (
+      acc_enabled or
+      stock_ctrl_state != 0 or
+      stock_ctrl_gate != 0 or
+      self.stock_acc_button or
+      self.stock_tja_button
+    )
 
     ret.cruiseState.available = acc_available
-    ret.cruiseState.enabled = acc_enabled
+    # This flexray-only i3 port uses button-based engagement (pcmCruise=False).
+    # If we mirror stock ACC-active into cruiseState.enabled, selfdrived will
+    # raise cruiseMismatch forever because it expects enabled to track OP state
+    # only on pcmCruise cars. Keep stock ACC/TJA state in the internal helpers
+    # above and expose only availability here.
+    ret.cruiseState.enabled = False
     ret.cruiseState.standstill = ret.standstill
 
     blinker_byte6 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
@@ -529,7 +581,7 @@ class CarState(CarStateBase):
         2: ButtonType.resumeCruise,
       }),
       *create_button_events(self.legacy_main_button, prev_legacy_main_button, {
-        1: ButtonType.mainCruise,
+        1: ButtonType.accelCruise,
         2: ButtonType.lkas,
       }),
     ]
@@ -550,6 +602,7 @@ class CarState(CarStateBase):
       ("LONG_STATE_HELPER_D", float("nan")),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
       ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
+      ("LAT_STOCK_TX_TRIGGER_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),

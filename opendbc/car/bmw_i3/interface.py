@@ -18,7 +18,9 @@ class CarInterface(CarInterfaceBase):
     ret.dashcamOnly = False
     ret.radarUnavailable = True
     ret.openpilotLongitudinalControl = bool(CarInterface.ENABLE_LONG_CONTROL)
-    ret.pcmCruise = True
+    # The i3 flexray-only port does not have a reliable stock PCM enable edge yet.
+    # Use button-based engagement instead of waiting for stock cruise to report active.
+    ret.pcmCruise = False
     ret.steerControlType = structs.CarParams.SteerControlType.angle
     ret.autoResumeSng = False
     ret.steerActuatorDelay = 0.1

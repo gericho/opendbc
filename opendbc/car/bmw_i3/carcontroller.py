@@ -1,7 +1,4 @@
-from opendbc.can import CANPacker
 from opendbc.car import structs
-from opendbc.car.carlog import carlog
-from opendbc.car.crc import CRC8J1850
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.lateral import apply_steer_angle_limits_vm
 from opendbc.car.vehicle_model import VehicleModel
@@ -11,6 +8,20 @@ from opendbc.car.bmw.values import CarControllerParams
 class CarController(CarControllerBase):
   ENABLE_LONG_TX_BUILDER = True
   ENABLE_LATERAL_TX_BUILDER = True
+  LAT72_ANGLE_FULL_SCALE_DEG = 30.0
+  LAT72_OFFSET_SPAN = 4
+  LAT72_POS_NIBBLE_BY_PHASE = {
+    0: 4, 1: 5, 2: 6, 3: 7, 4: 8, 5: 9, 6: 10, 7: 11,
+    8: 12, 9: 13, 10: 14, 11: 0, 12: 1, 13: 2, 14: 3, 15: 4,
+    16: 3, 17: 4, 18: 7, 19: 6, 20: 7, 21: 8, 22: 9, 23: 10,
+    24: 11, 25: 12, 26: 13, 27: 14, 28: 0, 29: 1, 30: 2, 31: 3,
+  }
+  LAT72_NEG_NIBBLE_BY_PHASE = {
+    0: 5, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12,
+    8: 13, 9: 14, 10: 0, 11: 14, 12: 0, 13: 1, 14: 2, 15: 3,
+    16: 4, 17: 5, 18: 6, 19: 7, 20: 8, 21: 9, 22: 10, 23: 11,
+    24: 12, 25: 13, 26: 14, 27: 0, 28: 1, 29: 2, 30: 3, 31: 4,
+  }
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -85,48 +96,11 @@ class CarController(CarControllerBase):
   }
   def __init__(self, dbc_names, CP, CP_SP):
     super().__init__(dbc_names, CP, CP_SP)
-    # Shadow-only builder based on the existing BMW SP2018 ACC/72 method.
-    # We do not transmit anything yet; this is only to converge on the
-    # logical payload shape before touching real output.
-    self.shadow_packer = CANPacker("bmw_sp2018")
     self.VM = VehicleModel(CP)
     self.apply_angle_last = 0.0
-    self.shadow_cnt = 0
-    self.shadow_cycle = 0
-    self.last_shadow_acc_values = None
-    self.last_shadow_acc_bytes = b""
     self.last_shadow_long_debug = None
     self.enable_long_tx_builder = bool(self.ENABLE_LONG_TX_BUILDER and CP.openpilotLongitudinalControl)
     self.enable_lateral_tx_builder = bool(self.ENABLE_LATERAL_TX_BUILDER)
-
-  def _next_shadow_cnt(self) -> int:
-    self.shadow_cnt = (self.shadow_cnt + 1) % 16
-    return self.shadow_cnt
-
-  def _next_shadow_cycle(self) -> int:
-    cycle = self.shadow_cycle
-    self.shadow_cycle = (self.shadow_cycle + 1) % 64
-    return cycle
-
-  def _crc8_j1850(self, data: bytes, init_value: int = 0xF1) -> int:
-    crc = init_value & 0xFF
-    for byte in data:
-      crc ^= byte & 0xFF
-      crc = CRC8J1850[crc]
-    return crc
-
-  def _shadow_steer_torque_req(self, desired_angle: float, current_angle: float) -> float:
-    # Shadow-only heuristic: BMW logs show steer_torque_req as a real field, but
-    # we do not have a closed i3-specific mapping yet. Use a conservative
-    # proportional term on angle error only for method debugging.
-    angle_error = desired_angle - current_angle
-    return float(max(-3.0, min(3.0, angle_error * 0.12)))
-
-  def _shadow_torque_reserve(self, driver_torque: float) -> int:
-    # Local BMW analysis suggests this reserve drops as driver torque magnitude
-    # rises. Keep a narrow, conservative range around the dynm default 0xA0.
-    reserve = 0xA0 - int(min(0x30, abs(driver_torque) * 4.0))
-    return max(0x70, min(0xA0, reserve))
 
   def _shadow_long_helper_state(self, CS) -> str:
     # Raw FlexRay helpers 55/56/63/93 are now the best offline discriminants
@@ -224,69 +198,107 @@ class CarController(CarControllerBase):
       "tx_desired_accel": desired_accel,
     }
 
+  @staticmethod
+  def _wrap15(value: int) -> int:
+    return value % 15
+
+  @staticmethod
+  def _build_i3_like_visible_72(phase: int, target_nibble: int) -> bytes:
+    payload = bytearray([0] * 16)
+    payload[0] = phase & 0xFF
+    if phase & 0x01:
+      # Real i3 control branch layout is:
+      #   byte0 = phase/subframe
+      #   byte1 = 0xFF
+      #   byte2 = 0xF? where low nibble carries the command-state orbit
+      #   byte3..7 = 0xFF
+      #   byte8 = 0xE0
+      #   byte9..15 = 0xFF
+      payload[1] = 0xFF
+      payload[2] = 0xF0 | (CarController._wrap15(target_nibble) & 0x0F)
+      payload[3:8] = b"\xFF" * 5
+      payload[8] = 0xE0
+      payload[9:16] = b"\xFF" * 7
+    return bytes(payload)
+
+  def _lat72_target_nibble(self, desired_angle: float, current_angle: float, stock_nibble: int, phase_raw: int) -> int:
+    angle_error = float(desired_angle - current_angle)
+    if self.LAT72_ANGLE_FULL_SCALE_DEG <= 0.0:
+      return self._wrap15(stock_nibble)
+    cmd_phase = (int(phase_raw) >> 1) & 0x1F
+    pos_nibble = self.LAT72_POS_NIBBLE_BY_PHASE.get(cmd_phase)
+    neg_nibble = self.LAT72_NEG_NIBBLE_BY_PHASE.get(cmd_phase)
+    normalized = max(-1.0, min(1.0, angle_error / self.LAT72_ANGLE_FULL_SCALE_DEG))
+    if abs(normalized) < 0.05:
+      return self._wrap15(stock_nibble)
+    if normalized > 0.0 and pos_nibble is not None:
+      return self._wrap15(pos_nibble)
+    if normalized < 0.0 and neg_nibble is not None:
+      return self._wrap15(neg_nibble)
+    offset = int(round(normalized * self.LAT72_OFFSET_SPAN))
+    return self._wrap15(int(stock_nibble) + offset)
+
+  def _lateral_tx_readiness(self, CC, CS) -> tuple[bool, str]:
+    reasons = []
+    if not self.enable_lateral_tx_builder:
+      reasons.append("builder_off")
+    if not bool(CC.latActive):
+      reasons.append("lat_inactive")
+    if not bool(getattr(CS, "stock_lat_active_hint", False)):
+      reasons.append("stock_lat_hint_off")
+    if int(getattr(CS, "stock_lat60_phase", -1)) != int(getattr(CS, "stock_lat72_phase", -2)):
+      reasons.append("60_72_phase_mismatch")
+    if not bool(getattr(CS, "stock_tja_active", False)):
+      reasons.append("tja_context_off")
+    if int(getattr(CS, "stock_acc_ctrl_state", 0)) == 35041:
+      reasons.append("manual_135_state")
+    ready = len(reasons) == 0
+    return ready, "ready" if ready else "|".join(reasons)
+
   def _build_shadow_lateral_tx(self, CC, CS, desired_angle: float):
     lat_allowed = bool(CC.latActive)
     dir_hint = str(getattr(CS, "stock_lat_dir_hint", "unknown"))
     mag = float(getattr(CS, "stock_lat_mag_hint", 0.0))
-    cnt1 = self._next_shadow_cnt()
-    values = {
-      "cycle_count": 1,
-      "crc1": 0,
-      "cnt1": cnt1,
-      "always_0x9": 9,
-      "steering_angle_req": desired_angle,
-      "steer_torque_req": 0.0,
-      "TJA_ready": 0,
-      "assist_mode": 1 if lat_allowed else 0,
-      "wayback_en1_lane_keeping_trigger": 0,
-      "lane_keeping_triggered": 0,
-      "like_assist_torque_reserve": 0xA0 if lat_allowed else 0x00,
-      "constants": 0x03ff17fe,
-      "wayback_en_2": 0,
-      "steering_engaged": 2 if lat_allowed else 0,
-      "maybe_assist_force_enhance": 0xA2,
-      "maybe_assist_force_weaken": 0xFA,
-    }
-    msg = self.shadow_packer.make_can_msg("ACC", 4, values)
-    payload = bytearray(msg[1])
-    payload[1] = self._crc8_j1850(bytes(payload[2:]))
-    values["crc1"] = payload[1]
-    self.last_shadow_acc_values = values
-    self.last_shadow_acc_bytes = bytes(payload)
+    trigger_phase = int(getattr(CS, "stock_lat60_phase", 0)) & 0xFF
+    phase = int(getattr(CS, "stock_lat72_phase", 0)) & 0xFF
+    stock_nibble = int(getattr(CS, "stock_lat72_cnt_nibble", 0)) & 0x0F
+    target_nibble = stock_nibble
+    if lat_allowed:
+      target_nibble = self._lat72_target_nibble(desired_angle, CS.out.steeringAngleDeg, stock_nibble, phase)
+    visible72 = self._build_i3_like_visible_72(phase, target_nibble)
+    lat_tx_ready, lat_tx_reason = self._lateral_tx_readiness(CC, CS)
     return {
-      "lat_phase": int(getattr(CS, "stock_lat72_phase", 0)),
+      "lat_phase": phase,
+      "lat_trigger_phase": trigger_phase,
       "lat_dir_hint": dir_hint,
       "lat_mag_hint": mag,
+      "lat_tx_ready": lat_tx_ready,
+      "lat_tx_reason": lat_tx_reason,
       "lat_tx_enabled": self.enable_lateral_tx_builder,
-      "lat_tx_msg_count": 1 if self.enable_lateral_tx_builder and lat_allowed else 0,
-      "tx72_hex": bytes(payload).hex(),
+      "lat_tx_msg_count": 1 if self.enable_lateral_tx_builder and lat_allowed and lat_tx_ready else 0,
+      "lat72_stock_nibble": stock_nibble,
+      "lat72_target_nibble": target_nibble,
+      "lat72_err3": int(getattr(CS, "stock_lat72_err3", 0)),
+      "lat72_err4": int(getattr(CS, "stock_lat72_err4", 0)),
+      "lat72_orbit_match": bool(getattr(CS, "stock_lat72_orbit_match", False)),
+      "lat72_current_angle": float(CS.out.steeringAngleDeg),
+      "lat72_desired_angle": float(desired_angle),
+      "lat72_angle_error": float(desired_angle - CS.out.steeringAngleDeg),
+      "tx72_hex": visible72.hex(),
       "tx96_hex": "",
     }
 
   def _build_lateral_can_msgs(self, CC, lateral_tx):
     lat_allowed = bool(CC.latActive)
-    if not (self.enable_lateral_tx_builder and lat_allowed):
+    if not (self.enable_lateral_tx_builder and lat_allowed and bool(lateral_tx.get("lat_tx_ready", False))):
       return []
     tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
     base72 = 0x01
-    # Firmware injector expects the override dat payload to contain only:
-    #   dat[0] = base/phase
-    #   dat[1:] = replacement bytes (replace_offset = 0)
+    # Dynm-style i3 firmware currently patches frame 72 via the visible 16-byte
+    # body, keyed by a fixed cycle_base=1 on trigger 60 -> target 72.
     return [
-      (72, bytes([base72]) + tx72[:9], 0),
+      (72, bytes([base72]) + tx72[:16], 0),
     ]
-
-  def _shadow_force_weaken(self, v_ego: float) -> int:
-    # Mirror the smnogar BMW lateral method explicitly. Their current i4 fit
-    # keeps the weaken field at a stock-like 250 over the validated speed band;
-    # keep the interpolation form so future i3-specific tuning can change the
-    # breakpoints/values without changing the payload logic again.
-    if v_ego <= self.LATERAL_FORCE_WEAKEN_BP[0]:
-      return int(self.LATERAL_FORCE_WEAKEN_V[0])
-    if v_ego >= self.LATERAL_FORCE_WEAKEN_BP[-1]:
-      return int(self.LATERAL_FORCE_WEAKEN_V[-1])
-    a = (v_ego - self.LATERAL_FORCE_WEAKEN_BP[0]) / (self.LATERAL_FORCE_WEAKEN_BP[-1] - self.LATERAL_FORCE_WEAKEN_BP[0])
-    return int(round(self.LATERAL_FORCE_WEAKEN_V[0] + a * (self.LATERAL_FORCE_WEAKEN_V[-1] - self.LATERAL_FORCE_WEAKEN_V[0])))
 
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
     actuators = CC.actuators

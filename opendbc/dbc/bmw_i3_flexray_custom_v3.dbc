@@ -131,14 +131,23 @@ CM_ SG_ 59 LONG_TX_POWERTRAIN_WORD_C "Companion word to LONG_TX_POWERTRAIN_WORD_
 CM_ SG_ 59 LONG_TX_POWERTRAIN_BYTE_3 "Low byte of the current best frame-59 positive/coast TX word. Useful for byte-local replay fitting and checksum/counter separation work.";
 CM_ SG_ 59 LONG_TX_POWERTRAIN_BYTE_5 "Low byte of the current best frame-59 companion TX word. Useful for byte-local replay fitting and checksum/counter separation work.";
 
+BO_ 60 LAT_STOCK_TX_TRIGGER_CANDIDATE: 17 BMW_I3
+ SG_ LAT_STOCK_TRIGGER_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TRIGGER_SUBFRAME_LSB : 0|2@1+ (1,0) [0|3] "" BMW_I3
+ SG_ LAT_STOCK_TRIGGER_CMD_PHASE : 1|5@1+ (1,0) [0|31] "" BMW_I3
+CM_ BO_ 60 "Primary SAS-side predecessor/trigger for lateral frame 72 on the i3. Latest realdata plus the dynm-style firmware path show the stock SAS emits the lateral stream as a paired burst on src0: 60 -> 72, repeated across four subframes every ~20 ms macro tick. Frame 60 is structurally near-empty outside byte0, so treat it as the scheduler/trigger half of the burst, not the analog steering payload.";
+CM_ SG_ 60 LAT_STOCK_TRIGGER_PHASE_BYTE_0 "Raw scheduler byte for the SAS-side predecessor of frame 72. This byte advances through the same burst order seen on 72 and is the practical trigger byte for firmware-aligned injection work.";
+CM_ SG_ 60 LAT_STOCK_TRIGGER_SUBFRAME_LSB "Low two bits of frame-60 byte0. Useful when reconstructing the four-subframe burst order observed in the SAS 20 ms lateral scheduler.";
+CM_ SG_ 60 LAT_STOCK_TRIGGER_CMD_PHASE "Derived command-phase view of frame-60 byte0 (byte0 >> 1). Use together with frame 72 when checking whether the trigger/control pair stays on the same phase orbit.";
+
 BO_ 72 LAT_STOCK_TX_CANDIDATE: 17 BMW_I3
  SG_ LAT_STOCK_TX_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_TX_CNT_NIBBLE : 16|4@1+ (1,0) [0|15] "" BMW_I3
  SG_ LAT_STOCK_TX_CONST_F_NIBBLE : 20|4@1+ (1,0) [0|15] "" BMW_I3
  SG_ LAT_STOCK_TX_FLAG_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 72 "Primary stock lateral TX family on the i3. Route-backed analysis plus dynm BMW references support frame 72 as the SAS-side steering-control frame, but the i3 raw capture does not expose a simple analog angle field directly. Current best practical interpretation is discrete and phase-local: use byte0 as the outer phase/subframe selector and byte2 low nibble as the command-state companion. The most useful raw proxy found so far is (phase = byte0 >> 1, nibble = byte2 low nibble), with a latent diagnostic coordinate z72 ~= phase - 1.075*nibble. Byte8 remains structurally fixed at 0xE0 in current captures.";
-CM_ SG_ 72 LAT_STOCK_TX_PHASE_BYTE_0 "Primary phase/subframe byte for stock lateral frame 72. Current best route-backed decode uses phase = byte0 >> 1 and parity/subframe splitting rather than treating byte0 itself as steering magnitude.";
-CM_ SG_ 72 LAT_STOCK_TX_CNT_NIBBLE "Low nibble of byte2 in stock lateral frame 72. This no longer appears to be just housekeeping: together with phase = (byte0 >> 1), it forms the best current discrete proxy for future steering-angle response.";
+CM_ BO_ 72 "Primary stock lateral control frame on the i3 SAS side. Firmware and route work now point to a paired burst architecture rather than a standalone 72 stream: every ~20 ms macro scheduler tick emits a 60 -> 72 burst across four subframes on src0. The i3 raw capture still does not expose a simple analog angle field directly; the best practical decode remains discrete and phase-local. Use byte0 as the outer phase/subframe selector and byte2 low nibble as the command-state companion. The most useful raw proxy found so far is (phase = byte0 >> 1, nibble = byte2 low nibble), with orbit checks around nibble ~= phase + 3 / phase + 4 (mod 16). Byte8 remains structurally fixed at 0xE0 in current captures.";
+CM_ SG_ 72 LAT_STOCK_TX_PHASE_BYTE_0 "Primary phase/subframe byte for stock lateral frame 72. Current best route-backed decode uses phase = byte0 >> 1 plus subframe splitting, not byte0 itself as steering magnitude.";
+CM_ SG_ 72 LAT_STOCK_TX_CNT_NIBBLE "Low nibble of byte2 in stock lateral frame 72. This is the key discrete command-state companion. Together with phase = (byte0 >> 1), it forms the best current raw orbit proxy for future steering response.";
 CM_ SG_ 72 LAT_STOCK_TX_CONST_F_NIBBLE "Constant high nibble 0xF in the lateral TX envelope byte pair. Treat as structural filler/format marker rather than command content.";
 CM_ SG_ 72 LAT_STOCK_TX_FLAG_BYTE_8 "Structurally stable tail byte, usually 0xE0 in current captures. Treat as fixed envelope/flag content unless future replay work proves otherwise.";
 
@@ -271,7 +280,7 @@ BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_LONG_MAIN_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 135 "Primary longitudinal main-state helper and best current live discriminator between manual / ACC-only / ACC+TJA families. In the current route set 000003ff (manual), 00000400 (ACC-only), and 00000402 (ACC+TJA), manual stays in the ...22e0e188a205 family, ACC-only moves to ...2228e260a205, and ACC+TJA moves to ...2228e2604206 or nearby ...e2403206 / ...e2683204 variants during managed steering. Use 135 together with 131 when classifying live stock context; 135 is the practical split between ACC-only and TJA-family operation.";
+CM_ BO_ 135 "Primary longitudinal/lateral session-state helper, but no longer a single rigid TJA gate. Historical labeling from 000003ff/00000400/00000402 still holds for the older families: manual -> ...22e0e188a205, ACC-only -> ...2228e260a205, older TJA -> ...2228e2604206 / ...20e0e2403206. Newer realdata route 00000006--e6a3e58043 shows additional valid managed-TJA families that do not fit the old 4206-only rule, especially ...20e0e240e201, ...2228e260e201, ...2228e2608202, and ...2228e2408202. Use 135 together with the 60->72 burst behavior when classifying stock lateral context; 135 alone is no longer sufficient to declare ACC-only vs TJA on newer routes.";
 
 BO_ 241 ACC_TJA_OLD_ROUTE_HELPER_F: 17 BMW_I3
  SG_ ACC_TJA_OLD_F_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3

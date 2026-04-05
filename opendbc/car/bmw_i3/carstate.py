@@ -15,6 +15,9 @@ class CarState(CarStateBase):
   USE_PTCAN_INPUTS = False
   STEER_OVERRIDE_APPLY_NM = 3.0
   STEER_OVERRIDE_RELEASE_NM = 2.0
+  _ASSIST_MODE_OFF = 0
+  _ASSIST_MODE_ACC = 1
+  _ASSIST_MODE_TJA = 2
 
   # Current best i3 route-backed interpretation of stock lateral frame 72:
   # the useful raw command proxy is discrete and phase-local, not a single
@@ -75,6 +78,8 @@ class CarState(CarStateBase):
     self.legacy_button_raw = False
     self.legacy_button_toggle_on = False
     self.legacy_button_cooldown = 0
+    self.stock_assist_mode_hist = deque(maxlen=4)
+    self.stock_assist_mode_stable = self._ASSIST_MODE_OFF
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
     self.main_cruise_button = 0
@@ -268,11 +273,36 @@ class CarState(CarStateBase):
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
       for b in buttonEvents:
-        # FlexRay-only i3 uses the legacy stalk family as a single toggle.
-        # Enable on the synthetic decelCruise release generated on toggle-on.
+        # FlexRay-only i3 uses stock ACC/TJA state transitions to synthesize a
+        # single button-based enable event. We keep the standard OP behavior:
+        # enable on a synthetic cruise-button release, disable on cancel.
         if b.type == ButtonType.decelCruise and not b.pressed:
           return True
     return False
+
+  @classmethod
+  def _stock_assist_mode(cls, acc_enabled: bool, tja_enabled: bool) -> int:
+    if tja_enabled:
+      return cls._ASSIST_MODE_TJA
+    if acc_enabled:
+      return cls._ASSIST_MODE_ACC
+    return cls._ASSIST_MODE_OFF
+
+  @classmethod
+  def _stock_button_mode_candidate(cls, gate: int, state: int) -> int | None:
+    # Route 2026-04-03 (`...bbbc`) gives the cleanest stable stock modes:
+    #   OFF      -> gate 643 / state 35041
+    #   ACC      -> gate 3584 / state 16610
+    #   ACC+TJA  -> gate 640 / state 24802
+    # Intermediate states like 26850, 18658, 225, or gate 656 / 16610 are
+    # transitions/internal context and should not directly trigger OP buttons.
+    if gate == 643 and state == 35041:
+      return cls._ASSIST_MODE_OFF
+    if gate == 3584 and state == 16610:
+      return cls._ASSIST_MODE_ACC
+    if gate == 640 and state == 24802:
+      return cls._ASSIST_MODE_TJA
+    return None
 
   @staticmethod
   def _update_long_template(base: bytes, phase: int, preserved: dict[int, int], command: dict[int, int]) -> bytes:
@@ -294,7 +324,7 @@ class CarState(CarStateBase):
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
 
-    ws = cp_flexray.vl.get("WHEEL_SPEED", {})
+    ws = cp_state.vl.get("WHEEL_SPEED", {})
     self.long_helper_46_wa = int(ws.get("WHEEL_SPEED_RAW_WORD_A", 0))
     self.long_helper_46_wb = int(ws.get("WHEEL_SPEED_RAW_WORD_B", 0))
     self.long_helper_46_wc = int(ws.get("WHEEL_SPEED_RAW_WORD_C", 0))
@@ -309,7 +339,7 @@ class CarState(CarStateBase):
     # Match the dynm/SP2018 BMW method semantically: consume vehicle speed only
     # from the valid m3 subframe of frame 55, and keep frame 46 wheel speeds as
     # fallback / consistency support.
-    vehicle_speed = cp_flexray.vl.get("VEHICLE_SPEED_PROV", {})
+    vehicle_speed = cp_state.vl.get("VEHICLE_SPEED_PROV", {})
     self.long_helper_55_wa = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_A", 0))
     self.long_helper_55_wb = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_B", 0))
     self.long_helper_55_wc = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_C", 0))
@@ -333,10 +363,10 @@ class CarState(CarStateBase):
     else:
       self.ptcan_steering_raw = 0
       self.ptcan_steering_companion_raw = 0
-      proxy44 = cp_flexray.vl.get("BRAKE_OR_REGEN_CANDIDATE_A", {})
+      proxy44 = cp_aux.vl.get("BRAKE_OR_REGEN_CANDIDATE_A", {})
       self.eps_angle_proxy_44_raw = int(proxy44.get("EPS_ANGLE_PROXY_44_RAW", 0))
       ret.steeringAngleDeg = float(proxy44.get("EPS_ANGLE_PROXY_44_DEG", self.out.steeringAngleDeg))
-    steer_torque = cp_flexray.vl.get("STEER_TORQUE", {})
+    steer_torque = cp_state.vl.get("STEER_TORQUE", {})
     self.long_helper_49_wa = int(steer_torque.get("STEER_TORQUE_RAW_WORD_A", 0))
     self.long_helper_49_wb = int(steer_torque.get("STEER_TORQUE_RAW_WORD_B", 0))
     self.long_helper_49_wc = int(steer_torque.get("STEER_TORQUE_RAW_WORD_C", 0))
@@ -352,7 +382,7 @@ class CarState(CarStateBase):
       self.driver_steer_pressed = torque_abs > self.STEER_OVERRIDE_APPLY_NM
     ret.steeringPressed = self.driver_steer_pressed
 
-    dynamics_yaw = cp_flexray.vl.get("DYNAMICS_YAW_PROV", {})
+    dynamics_yaw = cp_state.vl.get("DYNAMICS_YAW_PROV", {})
     self.long_helper_56_wa = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_A", 0))
     self.long_helper_56_wb = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_B", 0))
     self.long_helper_56_wc = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_C", 0))
@@ -364,14 +394,14 @@ class CarState(CarStateBase):
     # Best current stock longitudinal helper branches:
     #   59 -> powertrain-intent proxy
     #   54 -> brake-blend / regen-support proxy
-    long_59 = cp_flexray.vl.get("LONG_TX_POWERTRAIN_CANDIDATE", {})
+    long_59 = cp_aux.vl.get("LONG_TX_POWERTRAIN_CANDIDATE", {})
     self.long_59_phase = int(long_59.get("LONG_TX_POWERTRAIN_PHASE_BYTE_0", 0))
     self.long_59_wb = int(long_59.get("LONG_TX_POWERTRAIN_WORD_B", 0))
     self.long_59_wc = int(long_59.get("LONG_TX_POWERTRAIN_WORD_C", 0))
     self.long_59_b3 = int(long_59.get("LONG_TX_POWERTRAIN_BYTE_3", 0))
     self.long_59_b5 = int(long_59.get("LONG_TX_POWERTRAIN_BYTE_5", 0))
 
-    long_54 = cp_flexray.vl.get("LONG_TX_BRAKE_BLEND_CANDIDATE", {})
+    long_54 = cp_aux.vl.get("LONG_TX_BRAKE_BLEND_CANDIDATE", {})
     self.long_54_phase = int(long_54.get("LONG_TX_BRAKE_BLEND_PHASE_BYTE_0", 0))
     self.long_54_wb = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_B", 0))
     self.long_54_wc = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_C", 0))
@@ -418,13 +448,13 @@ class CarState(CarStateBase):
     self.stock_long_upstream_mode, self.stock_long_upstream_confidence = self._stock_long_upstream_hint(
       self.long_up_217_raw16, self.long_up_796_b1
     )
-    long63 = cp_flexray.vl.get("LONG_STATE_HELPER_D", {})
+    long63 = cp_aux.vl.get("LONG_STATE_HELPER_D", {})
     self.long_helper_63_wa = int(long63.get("LONG_STATE_HELPER_D_WORD_A", 0))
     self.long_helper_63_wb = int(long63.get("LONG_STATE_HELPER_D_WORD_B", 0))
     self.long_helper_63_wc = int(long63.get("LONG_STATE_HELPER_D_WORD_C", 0))
     self.long_helper_63_wd = int(long63.get("LONG_STATE_HELPER_D_WORD_D", 0))
 
-    long93 = cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_A", {})
+    long93 = cp_aux.vl.get("ACC_TJA_OLD_ROUTE_HELPER_A", {})
     self.long_helper_93_wa = int(long93.get("LONG_STATE_HELPER_A_WORD_A", 0))
     self.long_helper_93_wb = int(long93.get("LONG_STATE_HELPER_A_WORD_B", 0))
     self.long_helper_93_wc = int(long93.get("LONG_STATE_HELPER_A_WORD_C", 0))
@@ -474,7 +504,7 @@ class CarState(CarStateBase):
     ret.brake = min(1.0, brake_delta / 2060.0)
     ret.brakePressed = brake_delta > 10.0
 
-    drive_state = cp_state.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
+    drive_state = cp_aux.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
     drive_kind_b11 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_11", 0))
     drive_kind_b14 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_14", 0))
@@ -616,30 +646,27 @@ class CarState(CarStateBase):
       0x8015: 1,
       0x8016: 2,
     }.get(main_cruise_word, 0)
-    # Latest isolated ACC/TJA routes show two legacy FlexRay stalk families.
-    # Use the raw helper families directly and edge-detect them here instead of
-    # FlexRay legacy stalk family acts like a true toggle. Use the falling edge
-    # only, and alternate between:
-    #   toggle-on  -> decelCruise released  (buttonEnable)
-    #   toggle-off -> cancel pressed        (true OP disengage)
-    # This avoids the old "press disables, release re-enables immediately"
-    # behavior while keeping one deterministic action per real press.
-    #   30716 / 65282 -> ACC main button family
-    #   18684 / 65283 -> TJA stalk family
-    legacy_button_raw = self.stock_acc_button or self.stock_tja_button
+    # Latest live reverse work shows the wheel-command path is not a clean
+    # single-frame pulse. Treat it as an assist-state machine instead:
+    #   OFF < ACC < TJA
+    # and emit OP button events only when the stock state crosses one of those
+    # stable boundaries. This removes the false toggles caused by the old
+    # 97/112/116 pulse decoder while still tracking the driver's real intent.
     legacy_events: list[structs.CarState.ButtonEvent] = []
-    if self.legacy_button_cooldown > 0:
-      self.legacy_button_cooldown -= 1
-    if not legacy_button_raw and self.legacy_button_raw and self.legacy_button_cooldown == 0:
-      if self.legacy_button_toggle_on:
-        legacy_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.cancel))
-      else:
-        legacy_events.append(structs.CarState.ButtonEvent(pressed=False, type=ButtonType.decelCruise))
-      self.legacy_button_toggle_on = not self.legacy_button_toggle_on
-      # Debounce legacy FlexRay pulse trains so one physical press cannot
-      # generate multiple on/off toggles a few frames apart.
-      self.legacy_button_cooldown = 120
-    self.legacy_button_raw = legacy_button_raw
+    button_mode_candidate = self._stock_button_mode_candidate(stock_ctrl_gate, stock_ctrl_state)
+    if button_mode_candidate is not None:
+      self.stock_assist_mode_hist.append(button_mode_candidate)
+    if len(self.stock_assist_mode_hist) == self.stock_assist_mode_hist.maxlen:
+      mode_counts = Counter(self.stock_assist_mode_hist)
+      stable_mode, stable_votes = mode_counts.most_common(1)[0]
+      if stable_votes == self.stock_assist_mode_hist.maxlen and stable_mode != self.stock_assist_mode_stable:
+        if self.stock_assist_mode_stable == self._ASSIST_MODE_OFF and stable_mode in (self._ASSIST_MODE_ACC, self._ASSIST_MODE_TJA):
+          legacy_events.append(structs.CarState.ButtonEvent(pressed=False, type=ButtonType.decelCruise))
+        elif stable_mode == self._ASSIST_MODE_OFF and self.stock_assist_mode_stable in (self._ASSIST_MODE_ACC, self._ASSIST_MODE_TJA):
+          legacy_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.cancel))
+        elif self.stock_assist_mode_stable == self._ASSIST_MODE_TJA and stable_mode == self._ASSIST_MODE_ACC:
+          legacy_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.cancel))
+        self.stock_assist_mode_stable = stable_mode
 
     ret.buttonEvents = [
       *create_button_events(self.main_cruise_button, prev_main_cruise_button, {
@@ -654,20 +681,20 @@ class CarState(CarStateBase):
   def get_can_parsers(CP, CP_SP):
     dbc = DBC[CP.carFingerprint][Bus.pt]
     pt_messages = [
-      ("ACC_TJA_OLD_ROUTE_HELPER_D", float("nan")),
-      ("ACC_TJA_OLD_ROUTE_HELPER_E", float("nan")),
-    ]
-    cam_messages = [
       ("WHEEL_SPEED", float("nan")),
       ("STEER_TORQUE", float("nan")),
       ("VEHICLE_SPEED_PROV", float("nan")),
       ("DYNAMICS_YAW_PROV", float("nan")),
-      ("LONG_STATE_HELPER_D", float("nan")),
-      ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
-      ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
       ("LAT_STOCK_TX_TRIGGER_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
+      ("ACC_TJA_OLD_ROUTE_HELPER_D", float("nan")),
+      ("ACC_TJA_OLD_ROUTE_HELPER_E", float("nan")),
+    ]
+    cam_messages = [
+      ("LONG_STATE_HELPER_D", float("nan")),
+      ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
+      ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE_EXPERIMENTAL", float("nan")),

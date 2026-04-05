@@ -242,21 +242,17 @@ class CarController(CarControllerBase):
     reasons = []
     if not self.enable_lateral_tx_builder:
       reasons.append("builder_off")
+    if not bool(CC.enabled):
+      reasons.append("op_disabled")
     if not bool(CC.latActive):
       reasons.append("lat_inactive")
-    if not bool(getattr(CS, "stock_lat_active_hint", False)):
-      reasons.append("stock_lat_hint_off")
     if int(getattr(CS, "stock_lat60_phase", -1)) != int(getattr(CS, "stock_lat72_phase", -2)):
       reasons.append("60_72_phase_mismatch")
-    if not bool(getattr(CS, "stock_tja_active", False)):
-      reasons.append("tja_context_off")
-    if int(getattr(CS, "stock_acc_ctrl_state", 0)) == 35041:
-      reasons.append("manual_135_state")
     ready = len(reasons) == 0
     return ready, "ready" if ready else "|".join(reasons)
 
   def _build_shadow_lateral_tx(self, CC, CS, desired_angle: float):
-    lat_allowed = bool(CC.latActive)
+    lat_allowed = bool(CC.enabled and CC.latActive)
     dir_hint = str(getattr(CS, "stock_lat_dir_hint", "unknown"))
     mag = float(getattr(CS, "stock_lat_mag_hint", 0.0))
     trigger_phase = int(getattr(CS, "stock_lat60_phase", 0)) & 0xFF
@@ -289,7 +285,7 @@ class CarController(CarControllerBase):
     }
 
   def _build_lateral_can_msgs(self, CC, lateral_tx):
-    lat_allowed = bool(CC.latActive)
+    lat_allowed = bool(CC.enabled and CC.latActive)
     if not (self.enable_lateral_tx_builder and lat_allowed and bool(lateral_tx.get("lat_tx_ready", False))):
       return []
     tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))

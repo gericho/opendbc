@@ -12,6 +12,10 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
+  USE_PTCAN_INPUTS = False
+  STEER_OVERRIDE_APPLY_NM = 3.0
+  STEER_OVERRIDE_RELEASE_NM = 2.0
+
   # Current best i3 route-backed interpretation of stock lateral frame 72:
   # the useful raw command proxy is discrete and phase-local, not a single
   # analog byte. We expose it diagnostically as:
@@ -68,7 +72,9 @@ class CarState(CarStateBase):
     self.stock_speed_adjust = False
     self.stock_acc_button_cnt = 0
     self.stock_tja_button_cnt = 0
-    self.legacy_main_button = 0
+    self.legacy_button_raw = False
+    self.legacy_button_toggle_on = False
+    self.legacy_button_cooldown = 0
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
     self.main_cruise_button = 0
@@ -100,6 +106,7 @@ class CarState(CarStateBase):
     self.long_helper_49_wb = 0
     self.long_helper_49_wc = 0
     self.long_helper_49_wd = 0
+    self.eps_angle_proxy_44_raw = 0
     self.long_helper_55_wa = 0
     self.long_helper_55_wb = 0
     self.long_helper_55_wc = 0
@@ -119,6 +126,7 @@ class CarState(CarStateBase):
     self.long_54_stock_template = bytes([0xFF] * 17)
     self.long_59_stock_template = bytes([0xFF] * 17)
     self.driver_steer_torque = 0.0
+    self.driver_steer_pressed = False
     self.vehicle_speed_kph = 0.0
     self.stock_lat72_phase = 0
     self.stock_lat72_cmd_phase = 0
@@ -257,6 +265,15 @@ class CarState(CarStateBase):
       return ("coast", "medium")
     return ("unknown", "none")
 
+  def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
+    if not self.CP.pcmCruise:
+      for b in buttonEvents:
+        # FlexRay-only i3 uses the legacy stalk family as a single toggle.
+        # Enable on the synthetic decelCruise release generated on toggle-on.
+        if b.type == ButtonType.decelCruise and not b.pressed:
+          return True
+    return False
+
   @staticmethod
   def _update_long_template(base: bytes, phase: int, preserved: dict[int, int], command: dict[int, int]) -> bytes:
     payload = bytearray(base if len(base) == 17 else bytes([0xFF] * 17))
@@ -270,9 +287,10 @@ class CarState(CarStateBase):
     return bytes(payload)
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
-    cp_state = can_parsers[Bus.pt]
-    cp_flexray = can_parsers[Bus.cam]
+    cp_state = can_parsers[Bus.pt]   # src0 / SAS-side
+    cp_aux = can_parsers[Bus.cam]    # src1 / vehicle-side companion
     cp_can = can_parsers[Bus.party]
+    use_ptcan = self.USE_PTCAN_INPUTS
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
 
@@ -304,13 +322,20 @@ class CarState(CarStateBase):
     ret.vEgoCluster = ret.vEgoRaw
     ret.standstill = ret.vEgoRaw < 0.1
 
-    # PT-CAN 770 is the best current live steering-wheel-angle source on the i3.
-    pt_steering = cp_can.vl.get("PTCAN_STEERING_WHEEL_CANDIDATE", {})
-    self.ptcan_steering_raw = int(pt_steering.get("PTCAN_STEERING_WHEEL_RAW", 0))
-    pt_steering_deg = float(pt_steering.get("PTCAN_STEERING_WHEEL_ANGLE_I3_CAL", 0.0))
-    pt_steering_companion = cp_can.vl.get("PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE", {})
-    self.ptcan_steering_companion_raw = int(pt_steering_companion.get("PTCAN_STEERING_WHEEL_COMPANION_RAW", 0))
-    ret.steeringAngleDeg = pt_steering_deg
+    if use_ptcan:
+      # PT-CAN 770 is the best current live steering-wheel-angle source on the i3.
+      pt_steering = cp_can.vl.get("PTCAN_STEERING_WHEEL_CANDIDATE", {})
+      self.ptcan_steering_raw = int(pt_steering.get("PTCAN_STEERING_WHEEL_RAW", 0))
+      pt_steering_deg = float(pt_steering.get("PTCAN_STEERING_WHEEL_ANGLE_I3_CAL", 0.0))
+      pt_steering_companion = cp_can.vl.get("PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE", {})
+      self.ptcan_steering_companion_raw = int(pt_steering_companion.get("PTCAN_STEERING_WHEEL_COMPANION_RAW", 0))
+      ret.steeringAngleDeg = pt_steering_deg
+    else:
+      self.ptcan_steering_raw = 0
+      self.ptcan_steering_companion_raw = 0
+      proxy44 = cp_flexray.vl.get("BRAKE_OR_REGEN_CANDIDATE_A", {})
+      self.eps_angle_proxy_44_raw = int(proxy44.get("EPS_ANGLE_PROXY_44_RAW", 0))
+      ret.steeringAngleDeg = float(proxy44.get("EPS_ANGLE_PROXY_44_DEG", self.out.steeringAngleDeg))
     steer_torque = cp_flexray.vl.get("STEER_TORQUE", {})
     self.long_helper_49_wa = int(steer_torque.get("STEER_TORQUE_RAW_WORD_A", 0))
     self.long_helper_49_wb = int(steer_torque.get("STEER_TORQUE_RAW_WORD_B", 0))
@@ -320,7 +345,12 @@ class CarState(CarStateBase):
     if steer_torque_cycle == 0:
       self.driver_steer_torque = float(steer_torque.get("DRIVER_STEER_TORQUE_BMW", self.driver_steer_torque))
     ret.steeringTorque = self.driver_steer_torque
-    ret.steeringPressed = abs(ret.steeringTorque) > 1.5
+    torque_abs = abs(ret.steeringTorque)
+    if self.driver_steer_pressed:
+      self.driver_steer_pressed = torque_abs > self.STEER_OVERRIDE_RELEASE_NM
+    else:
+      self.driver_steer_pressed = torque_abs > self.STEER_OVERRIDE_APPLY_NM
+    ret.steeringPressed = self.driver_steer_pressed
 
     dynamics_yaw = cp_flexray.vl.get("DYNAMICS_YAW_PROV", {})
     self.long_helper_56_wa = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_A", 0))
@@ -362,19 +392,29 @@ class CarState(CarStateBase):
       command={4: (self.long_59_wb >> 8) & 0xFF, 6: (self.long_59_wc >> 8) & 0xFF},
     )
 
-    pt_accel = cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {})
-    self.long_up_217_raw16 = int(pt_accel.get("ACCEL_RAW_PT_CAN", 0))
-    self.long_up_217_word23 = int(pt_accel.get("ACCELERATOR_WORD23_PT_CAN", 0))
-    self.long_up_217_value = max(0, min(4000, int(pt_accel.get("ACCELERATOR_VALUE_PT_CAN", 0))))
-    self.long_up_217_i4_compat12 = int(pt_accel.get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
+    if use_ptcan:
+      pt_accel = cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {})
+      self.long_up_217_raw16 = int(pt_accel.get("ACCEL_RAW_PT_CAN", 0))
+      self.long_up_217_word23 = int(pt_accel.get("ACCELERATOR_WORD23_PT_CAN", 0))
+      self.long_up_217_value = max(0, min(4000, int(pt_accel.get("ACCELERATOR_VALUE_PT_CAN", 0))))
+      self.long_up_217_i4_compat12 = int(pt_accel.get("ACCELERATOR_I4_COMPAT_PT_CAN", 0))
 
-    pt_brake_aux = cp_can.vl.get("PTCAN_CRUISE_BUTTONS_AUX", {})
-    self.brake_239_word23 = int(pt_brake_aux.get("BRAKE_PEDAL_WORD23_PT_CAN", 32000))
-    self.brake_239_word56 = int(pt_brake_aux.get("BRAKE_PEDAL_WORD56_PT_CAN", 32000))
+      pt_brake_aux = cp_can.vl.get("PTCAN_CRUISE_BUTTONS_AUX", {})
+      self.brake_239_word23 = int(pt_brake_aux.get("BRAKE_PEDAL_WORD23_PT_CAN", 32000))
+      self.brake_239_word56 = int(pt_brake_aux.get("BRAKE_PEDAL_WORD56_PT_CAN", 32000))
 
-    pt_brake = cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {})
-    self.long_up_796_raw16 = int(pt_brake.get("BRAKE_PRESSED_RAW_PT_CAN", 0))
-    self.long_up_796_b1 = int(pt_brake.get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
+      pt_brake = cp_can.vl.get("PTCAN_BRAKE_PRESSED_CANDIDATE", {})
+      self.long_up_796_raw16 = int(pt_brake.get("BRAKE_PRESSED_RAW_PT_CAN", 0))
+      self.long_up_796_b1 = int(pt_brake.get("BRAKE_PRESSED_BYTE_1_PT_CAN", 0xFF))
+    else:
+      self.long_up_217_raw16 = 0
+      self.long_up_217_word23 = 0
+      self.long_up_217_value = 0
+      self.long_up_217_i4_compat12 = 0
+      self.brake_239_word23 = 32000
+      self.brake_239_word56 = 32000
+      self.long_up_796_raw16 = 0
+      self.long_up_796_b1 = 0xFF
     self.stock_long_upstream_mode, self.stock_long_upstream_confidence = self._stock_long_upstream_hint(
       self.long_up_217_raw16, self.long_up_796_b1
     )
@@ -390,12 +430,12 @@ class CarState(CarStateBase):
     self.long_helper_93_wc = int(long93.get("LONG_STATE_HELPER_A_WORD_C", 0))
     self.long_helper_93_wd = int(long93.get("LONG_STATE_HELPER_A_WORD_D", 0))
 
-    lat60 = cp_flexray.vl.get("LAT_STOCK_TX_TRIGGER_CANDIDATE", {})
+    lat60 = cp_state.vl.get("LAT_STOCK_TX_TRIGGER_CANDIDATE", {})
     self.stock_lat60_phase = int(lat60.get("LAT_STOCK_TRIGGER_PHASE_BYTE_0", 0))
     self.stock_lat60_cmd_phase = int(lat60.get("LAT_STOCK_TRIGGER_CMD_PHASE", 0))
     self.stock_lat60_subframe = int(lat60.get("LAT_STOCK_TRIGGER_SUBFRAME_LSB", 0))
 
-    lat72 = cp_flexray.vl.get("LAT_STOCK_TX_CANDIDATE", {})
+    lat72 = cp_state.vl.get("LAT_STOCK_TX_CANDIDATE", {})
     self.stock_lat72_phase = int(lat72.get("LAT_STOCK_TX_PHASE_BYTE_0", 0))
     self.stock_lat72_cmd_phase = (self.stock_lat72_phase >> 1) & 0x1F
     self.stock_lat72_cnt_nibble = int(lat72.get("LAT_STOCK_TX_CNT_NIBBLE", 0))
@@ -405,13 +445,13 @@ class CarState(CarStateBase):
     self.stock_lat72_err3 = self._wrap_orbit_err(self.stock_lat72_cnt_nibble, (self.stock_lat72_cmd_phase + 3) & 0x0F)
     self.stock_lat72_err4 = self._wrap_orbit_err(self.stock_lat72_cnt_nibble, (self.stock_lat72_cmd_phase + 4) & 0x0F)
     self.stock_lat72_orbit_match = self.stock_lat72_err3 == 0 or self.stock_lat72_err4 == 0
-    lat96 = cp_flexray.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
+    lat96 = cp_state.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
     self.stock_lat96_b2 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_2", 0))
     self.stock_lat96_b3 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_3", 0))
-    lat112 = cp_flexray.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
-    lat116 = cp_flexray.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
+    lat112 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
+    lat116 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
     self.stock_lat112_b5 = int(lat112.get("LAT_STOCK_MAIN_BYTE_5", 0))
     self.stock_lat116_b5 = int(lat116.get("LAT_STOCK_SUPPORT_BYTE_5", 0))
     # Best current live discriminator from route work:
@@ -434,7 +474,7 @@ class CarState(CarStateBase):
     ret.brake = min(1.0, brake_delta / 2060.0)
     ret.brakePressed = brake_delta > 10.0
 
-    drive_state = cp_flexray.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
+    drive_state = cp_state.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
     drive_kind_b11 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_11", 0))
     drive_kind_b14 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_14", 0))
@@ -467,8 +507,8 @@ class CarState(CarStateBase):
 
     stock_ctrl_state = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_E", {}).get("ACC_TJA_OLD_CTRL_STATE", 0))
     stock_ctrl_gate = int(cp_state.vl.get("ACC_TJA_OLD_ROUTE_HELPER_D", {}).get("ACC_TJA_OLD_CTRL_GATE", 0))
-    stock_stalk_main_a = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
-    stock_stalk_main_b = int(cp_flexray.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
+    stock_stalk_main_a = int(cp_aux.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_A", 0))
+    stock_stalk_main_b = int(cp_aux.vl.get("ACC_TJA_OLD_ROUTE_HELPER_B", {}).get("ACC_TJA_OLD_STALK_MAIN_B", 0))
     self.stock_acc_ctrl_state = stock_ctrl_state
     self.stock_acc_ctrl_gate = stock_ctrl_gate
     self.stock_acc_base_armed = stock_ctrl_state == 16610
@@ -495,8 +535,8 @@ class CarState(CarStateBase):
     # The stalk helper families are observed as short periodic pulses on FlexRay.
     # Stretch them slightly so UI/engagement logic sees one stable press/release
     # instead of repeated chattering edges.
-    self.stock_acc_button_cnt = 8 if raw_stock_acc_button else max(self.stock_acc_button_cnt - 1, 0)
-    self.stock_tja_button_cnt = 8 if raw_stock_tja_button else max(self.stock_tja_button_cnt - 1, 0)
+    self.stock_acc_button_cnt = 4 if raw_stock_acc_button else max(self.stock_acc_button_cnt - 1, 0)
+    self.stock_tja_button_cnt = 4 if raw_stock_tja_button else max(self.stock_tja_button_cnt - 1, 0)
     self.stock_acc_button = self.stock_acc_button_cnt > 0
     self.stock_tja_button = self.stock_tja_button_cnt > 0
     self.stock_speed_adjust = stock_stalk_main_a == 5884 and stock_stalk_main_b == 65282
@@ -527,15 +567,26 @@ class CarState(CarStateBase):
     ret.cruiseState.enabled = False
     ret.cruiseState.standstill = ret.standstill
 
-    blinker_byte6 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
-    turn_left_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_LEFT_TURN_CANDIDATE", 0))
-    turn_right_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_RIGHT_TURN_CANDIDATE", 0))
-    turn_active_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_ACTIVE_CANDIDATE", 0))
-    turn_idle_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_IDLE_CANDIDATE", 0))
-    main_cruise_word = int(cp_can.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
-    driver_door_state = int(cp_can.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
-    seatbelt_a = int(cp_can.vl.get("PTCAN_SEATBELT_CANDIDATE_A", {}).get("PTCAN_SEATBELT_BYTE_4_A", 0))
-    seatbelt_b = int(cp_can.vl.get("PTCAN_SEATBELT_CANDIDATE_B", {}).get("PTCAN_SEATBELT_BYTE_2_B", 0))
+    if use_ptcan:
+      blinker_byte6 = int(cp_can.vl.get("PTCAN_BLINKER_STATE_CANDIDATE", {}).get("BLINKER_STATE_BYTE_6", 0))
+      turn_left_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_LEFT_TURN_CANDIDATE", 0))
+      turn_right_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_RIGHT_TURN_CANDIDATE", 0))
+      turn_active_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_ACTIVE_CANDIDATE", 0))
+      turn_idle_candidate = int(cp_can.vl.get("PTCAN_TURNSIGNALS_CANDIDATE", {}).get("PTCAN_TURNSIGNAL_IDLE_CANDIDATE", 0))
+      main_cruise_word = int(cp_can.vl.get("PTCAN_CRUISE_BUTTONS_MAIN", {}).get("CRUISE_BTN_MAIN_PT_CAN", 0))
+      driver_door_state = int(cp_can.vl.get("PTCAN_DRIVER_DOOR_CANDIDATE", {}).get("DRIVER_DOOR_STATE_BYTE_2", 0))
+      seatbelt_a = int(cp_can.vl.get("PTCAN_SEATBELT_CANDIDATE_A", {}).get("PTCAN_SEATBELT_BYTE_4_A", 0))
+      seatbelt_b = int(cp_can.vl.get("PTCAN_SEATBELT_CANDIDATE_B", {}).get("PTCAN_SEATBELT_BYTE_2_B", 0))
+    else:
+      blinker_byte6 = 0
+      turn_left_candidate = 0
+      turn_right_candidate = 0
+      turn_active_candidate = 0
+      turn_idle_candidate = 0
+      main_cruise_word = 0
+      driver_door_state = 0
+      seatbelt_a = 0
+      seatbelt_b = 0
     # Prefer the dedicated PT-CAN turn-signal helper frame over the noisier byte-family
     # reverse from 274. The bit layout is already described in the custom DBC and gives
     # us explicit left/right/active/idle candidates.
@@ -556,7 +607,6 @@ class CarState(CarStateBase):
     ret.espDisabled = False
 
     prev_main_cruise_button = self.main_cruise_button
-    prev_legacy_main_button = self.legacy_main_button
     # Broad button-route scans show only two 415-word values with enough purity to
     # be worth mapping today:
     #   0x8015 -> SET family
@@ -566,24 +616,37 @@ class CarState(CarStateBase):
       0x8015: 1,
       0x8016: 2,
     }.get(main_cruise_word, 0)
-    # Latest isolated ACC/TJA route shows a much cleaner split on FlexRay 97:
+    # Latest isolated ACC/TJA routes show two legacy FlexRay stalk families.
+    # Use the raw helper families directly and edge-detect them here instead of
+    # FlexRay legacy stalk family acts like a true toggle. Use the falling edge
+    # only, and alternate between:
+    #   toggle-on  -> decelCruise released  (buttonEnable)
+    #   toggle-off -> cancel pressed        (true OP disengage)
+    # This avoids the old "press disables, release re-enables immediately"
+    # behavior while keeping one deterministic action per real press.
     #   30716 / 65282 -> ACC main button family
-    #   18684 / 65283 -> TJA / lane-assist main button family
-    self.legacy_main_button = 0
-    if self.stock_acc_button:
-      self.legacy_main_button = 1
-    elif self.stock_tja_button:
-      self.legacy_main_button = 2
+    #   18684 / 65283 -> TJA stalk family
+    legacy_button_raw = self.stock_acc_button or self.stock_tja_button
+    legacy_events: list[structs.CarState.ButtonEvent] = []
+    if self.legacy_button_cooldown > 0:
+      self.legacy_button_cooldown -= 1
+    if not legacy_button_raw and self.legacy_button_raw and self.legacy_button_cooldown == 0:
+      if self.legacy_button_toggle_on:
+        legacy_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.cancel))
+      else:
+        legacy_events.append(structs.CarState.ButtonEvent(pressed=False, type=ButtonType.decelCruise))
+      self.legacy_button_toggle_on = not self.legacy_button_toggle_on
+      # Debounce legacy FlexRay pulse trains so one physical press cannot
+      # generate multiple on/off toggles a few frames apart.
+      self.legacy_button_cooldown = 120
+    self.legacy_button_raw = legacy_button_raw
 
     ret.buttonEvents = [
       *create_button_events(self.main_cruise_button, prev_main_cruise_button, {
         1: ButtonType.setCruise,
         2: ButtonType.resumeCruise,
       }),
-      *create_button_events(self.legacy_main_button, prev_legacy_main_button, {
-        1: ButtonType.accelCruise,
-        2: ButtonType.lkas,
-      }),
+      *legacy_events,
     ]
     return ret, ret_sp
 
@@ -608,10 +671,11 @@ class CarState(CarStateBase):
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE_EXPERIMENTAL", float("nan")),
+      ("BRAKE_OR_REGEN_CANDIDATE_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),
     ]
-    party_messages = [
+    party_messages = [] if not CarState.USE_PTCAN_INPUTS else [
       ("PTCAN_ACCELERATOR_CANDIDATE", float("nan")),
       ("PTCAN_STEERING_WHEEL_COMPANION_CANDIDATE", float("nan")),
       ("PTCAN_STEERING_WHEEL_CANDIDATE", float("nan")),

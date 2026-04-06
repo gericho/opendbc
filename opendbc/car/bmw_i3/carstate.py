@@ -105,10 +105,6 @@ class CarState(CarStateBase):
     self.brake_239_word56 = 32000
     self.stock_long_upstream_mode = "unknown"
     self.stock_long_upstream_confidence = "none"
-    self.long_helper_46_wa = 0
-    self.long_helper_46_wb = 0
-    self.long_helper_46_wc = 0
-    self.long_helper_46_wd = 0
     self.long_helper_49_wa = 0
     self.long_helper_49_wb = 0
     self.long_helper_49_wc = 0
@@ -327,21 +323,9 @@ class CarState(CarStateBase):
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
 
-    ws = cp_aux.vl.get("WHEEL_SPEED", {})
-    self.long_helper_46_wa = int(ws.get("WHEEL_SPEED_RAW_WORD_A", 0))
-    self.long_helper_46_wb = int(ws.get("WHEEL_SPEED_RAW_WORD_B", 0))
-    self.long_helper_46_wc = int(ws.get("WHEEL_SPEED_RAW_WORD_C", 0))
-    self.long_helper_46_wd = int(ws.get("WHEEL_SPEED_RAW_WORD_D", 0))
-    ret.wheelSpeeds = WheelSpeeds(fl=float(ws.get("FL_SPEED_RAW", 0.0)) / 3.6,
-                                  fr=float(ws.get("FR_SPEED_RAW", 0.0)) / 3.6,
-                                  rl=float(ws.get("RL_SPEED_RAW", 0.0)) / 3.6,
-                                  rr=float(ws.get("RR_SPEED_RAW", 0.0)) / 3.6)
-
-    wheel_speeds = [ret.wheelSpeeds.fl, ret.wheelSpeeds.fr, ret.wheelSpeeds.rl, ret.wheelSpeeds.rr]
-    wheel_speed_avg = float(sum(wheel_speeds) / 4.0)
     # Match the dynm/SP2018 BMW method semantically: consume vehicle speed only
-    # from the valid m3 subframe of frame 55, and keep frame 46 wheel speeds as
-    # fallback / consistency support.
+    # from the valid m3 subframe of frame 55. Frame 46 was removed from the
+    # runtime path because it does not track vehicle speed closely enough on the i3.
     vehicle_speed = cp_aux.vl.get("VEHICLE_SPEED_PROV", {})
     self.long_helper_55_wa = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_A", 0))
     self.long_helper_55_wb = int(vehicle_speed.get("VEHICLE_SPEED_RAW_WORD_B", 0))
@@ -350,9 +334,11 @@ class CarState(CarStateBase):
     vehicle_speed_cycle = int(vehicle_speed.get("VEHICLE_SPEED_CYCLE_RAW", -1))
     if vehicle_speed_cycle == 3:
       self.vehicle_speed_kph = float(vehicle_speed.get("VEHICLE_SPEED_BMW", self.vehicle_speed_kph))
-    ret.vEgoRaw = self.vehicle_speed_kph * CV.KPH_TO_MS if self.vehicle_speed_kph > 0.0 else wheel_speed_avg
+    ret.vEgoRaw = self.vehicle_speed_kph * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-    ret.vEgoCluster = ret.vEgoRaw
+    # The cluster consistently reads about 1 kph higher than the raw FlexRay
+    # vehicle-speed value, so keep the UI-aligned offset only on the cluster path.
+    ret.vEgoCluster = ret.vEgoRaw + CV.KPH_TO_MS
     ret.standstill = ret.vEgoRaw < 0.1
 
     if use_ptcan:
@@ -394,7 +380,6 @@ class CarState(CarStateBase):
     self.long_helper_56_wb = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_B", 0))
     self.long_helper_56_wc = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_C", 0))
     self.long_helper_56_wd = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_D", 0))
-    ret.yawRate = float(dynamics_yaw.get("YAW_RATE_RAW_A", 0.0))
     # No physical brake-pressure value is closed yet.
     ret.brake = 0.0
 
@@ -702,7 +687,6 @@ class CarState(CarStateBase):
       ("ACC_TJA_OLD_ROUTE_HELPER_E", float("nan")),
     ]
     cam_messages = [
-      ("WHEEL_SPEED", float("nan")),
       ("VEHICLE_SPEED_PROV", float("nan")),
       ("STEER_TORQUE", float("nan")),
       ("EPS_ANGLE", float("nan")),

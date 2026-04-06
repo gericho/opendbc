@@ -9,6 +9,11 @@ class CarController(CarControllerBase):
   ENABLE_LONG_TX_BUILDER = True
   ENABLE_LATERAL_TX_BUILDER = True
   LAT72_ANGLE_FULL_SCALE_DEG = 30.0
+  LAT72_MATCH_DELTA_BP = [0.0, 3.0, 8.0, 15.0]
+  LAT72_MATCH_DELTA_V = [3.0, 4.0, 6.0, 7.0]
+  LAT72_SAFE_ERROR_DEG = 12.0
+  LAT72_TARGET_DEADBAND_DEG = 1.5
+  LAT72_TARGET_CMD_MIN_DEG = 2.5
   LAT72_OFFSET_SPAN = 4
   LAT72_POS_NIBBLE_BY_PHASE = {
     0: 4, 1: 5, 2: 6, 3: 7, 4: 8, 5: 9, 6: 10, 7: 11,
@@ -221,22 +226,37 @@ class CarController(CarControllerBase):
       payload[9:16] = b"\xFF" * 7
     return bytes(payload)
 
-  def _lat72_target_nibble(self, desired_angle: float, current_angle: float, stock_nibble: int, phase_raw: int) -> int:
-    angle_error = float(desired_angle - current_angle)
-    if self.LAT72_ANGLE_FULL_SCALE_DEG <= 0.0:
+  @classmethod
+  def _match_desired_angle_to_current(cls, desired_angle: float, current_angle: float, v_ego: float) -> float:
+    if v_ego <= cls.LAT72_MATCH_DELTA_BP[0]:
+      max_delta = cls.LAT72_MATCH_DELTA_V[0]
+    elif v_ego >= cls.LAT72_MATCH_DELTA_BP[-1]:
+      max_delta = cls.LAT72_MATCH_DELTA_V[-1]
+    else:
+      max_delta = cls.LAT72_MATCH_DELTA_V[-1]
+      for i in range(len(cls.LAT72_MATCH_DELTA_BP) - 1):
+        x0 = cls.LAT72_MATCH_DELTA_BP[i]
+        x1 = cls.LAT72_MATCH_DELTA_BP[i + 1]
+        if x0 <= v_ego <= x1:
+          y0 = cls.LAT72_MATCH_DELTA_V[i]
+          y1 = cls.LAT72_MATCH_DELTA_V[i + 1]
+          t = 0.0 if x1 == x0 else (v_ego - x0) / (x1 - x0)
+          max_delta = y0 + (y1 - y0) * t
+          break
+    delta = max(-max_delta, min(max_delta, float(desired_angle - current_angle)))
+    return float(current_angle + delta)
+
+  def _lat72_target_nibble(self, desired_angle: float, current_angle: float, stock_nibble: int, cmd_phase: int) -> int:
+    error = float(desired_angle - current_angle)
+    if abs(error) < self.LAT72_TARGET_DEADBAND_DEG:
       return self._wrap15(stock_nibble)
-    cmd_phase = (int(phase_raw) >> 1) & 0x1F
-    pos_nibble = self.LAT72_POS_NIBBLE_BY_PHASE.get(cmd_phase)
-    neg_nibble = self.LAT72_NEG_NIBBLE_BY_PHASE.get(cmd_phase)
-    normalized = max(-1.0, min(1.0, angle_error / self.LAT72_ANGLE_FULL_SCALE_DEG))
-    if abs(normalized) < 0.05:
-      return self._wrap15(stock_nibble)
-    if normalized > 0.0 and pos_nibble is not None:
-      return self._wrap15(pos_nibble)
-    if normalized < 0.0 and neg_nibble is not None:
-      return self._wrap15(neg_nibble)
-    offset = int(round(normalized * self.LAT72_OFFSET_SPAN))
-    return self._wrap15(int(stock_nibble) + offset)
+
+    phase = int(cmd_phase) & 0x1F
+    if error > self.LAT72_TARGET_CMD_MIN_DEG:
+      return self._wrap15(self.LAT72_POS_NIBBLE_BY_PHASE.get(phase, stock_nibble))
+    if error < -self.LAT72_TARGET_CMD_MIN_DEG:
+      return self._wrap15(self.LAT72_NEG_NIBBLE_BY_PHASE.get(phase, stock_nibble))
+    return self._wrap15(stock_nibble)
 
   def _lateral_tx_readiness(self, CC, CS) -> tuple[bool, str]:
     reasons = []
@@ -257,14 +277,17 @@ class CarController(CarControllerBase):
     mag = float(getattr(CS, "stock_lat_mag_hint", 0.0))
     trigger_phase = int(getattr(CS, "stock_lat60_phase", 0)) & 0xFF
     phase = int(getattr(CS, "stock_lat72_phase", 0)) & 0xFF
+    predicted_phase = (phase + 4) & 0x3F
+    cmd_phase = (predicted_phase >> 1) & 0x1F
     stock_nibble = int(getattr(CS, "stock_lat72_cnt_nibble", 0)) & 0x0F
     target_nibble = stock_nibble
     if lat_allowed:
-      target_nibble = self._lat72_target_nibble(desired_angle, CS.out.steeringAngleDeg, stock_nibble, phase)
-    visible72 = self._build_i3_like_visible_72(phase, target_nibble)
+      target_nibble = self._lat72_target_nibble(desired_angle, CS.out.steeringAngleDeg, stock_nibble, cmd_phase)
+    visible72 = self._build_i3_like_visible_72(predicted_phase, target_nibble)
     lat_tx_ready, lat_tx_reason = self._lateral_tx_readiness(CC, CS)
     return {
       "lat_phase": phase,
+      "lat_match_phase": predicted_phase,
       "lat_trigger_phase": trigger_phase,
       "lat_dir_hint": dir_hint,
       "lat_mag_hint": mag,
@@ -273,6 +296,7 @@ class CarController(CarControllerBase):
       "lat_tx_enabled": self.enable_lateral_tx_builder,
       "lat_tx_msg_count": 1 if self.enable_lateral_tx_builder and lat_allowed and lat_tx_ready else 0,
       "lat72_stock_nibble": stock_nibble,
+      "lat72_cmd_phase": cmd_phase,
       "lat72_target_nibble": target_nibble,
       "lat72_err3": int(getattr(CS, "stock_lat72_err3", 0)),
       "lat72_err4": int(getattr(CS, "stock_lat72_err4", 0)),
@@ -287,6 +311,16 @@ class CarController(CarControllerBase):
   def _build_lateral_can_msgs(self, CC, lateral_tx):
     lat_allowed = bool(CC.enabled and CC.latActive)
     if not (self.enable_lateral_tx_builder and lat_allowed and bool(lateral_tx.get("lat_tx_ready", False))):
+      return []
+    phase72 = int(lateral_tx.get("lat_phase", 0)) & 0xFF
+    # Current Pico firmware arms the 60->72 injector on cycle_base=1 only.
+    # Keep the host-side override aligned to that bucket instead of queuing a
+    # phase-sensitive payload that may get consumed on a later, mismatched cycle.
+    if (phase72 & 0x03) != 0x01:
+      return []
+    desired_angle = float(lateral_tx.get("lat72_desired_angle", 0.0))
+    current_angle = float(lateral_tx.get("lat72_current_angle", 0.0))
+    if abs(desired_angle - current_angle) > self.LAT72_SAFE_ERROR_DEG:
       return []
     tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
     base72 = 0x01
@@ -311,6 +345,7 @@ class CarController(CarControllerBase):
       desired_angle = float(actuators.steeringAngleDeg)
       desired_angle = apply_steer_angle_limits_vm(desired_angle, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
                                                   True, CarControllerParams, self.VM)
+      desired_angle = self._match_desired_angle_to_current(desired_angle, CS.out.steeringAngleDeg, CS.out.vEgoRaw)
       self.apply_angle_last = desired_angle
 
     lateral_tx = self._build_shadow_lateral_tx(CC, CS, desired_angle)

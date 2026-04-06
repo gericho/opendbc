@@ -60,7 +60,7 @@ class CarState(CarStateBase):
 
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     super().__init__(CP, CP_SP)
-    self.shifter_values = CANDefine(DBC[CP.carFingerprint][Bus.pt]).dv.get("DRIVE_STATE_EXPERIMENTAL", {})
+    self.shifter_values = CANDefine(DBC[CP.carFingerprint][Bus.pt]).dv.get("DRIVE_STATE", {})
     # These helpers originally came from historical route correlation work, but
     # 131/135/97 remain the current primary stock ACC/TJA state/button families.
     self.stock_acc_ctrl_state = 0
@@ -68,6 +68,7 @@ class CarState(CarStateBase):
     self.stock_tja_active = False
     self.stock_acc_base_armed = False
     self.stock_assist_advanced = False
+    self.eps_angle_51_raw = 0
     self.stock_stalk_main_a = 0
     self.stock_stalk_main_b = 0
     self.stock_acc_button = False
@@ -365,13 +366,13 @@ class CarState(CarStateBase):
     else:
       self.ptcan_steering_raw = 0
       self.ptcan_steering_companion_raw = 0
-      dynamics_yaw = cp_aux.vl.get("DYNAMICS_YAW_PROV", {})
-      self.steering_angle_proxy_56_raw = int(dynamics_yaw.get("STEERING_ANGLE_PROXY_56_RAW", 0))
-      proxy56_deg = float(dynamics_yaw.get("STEERING_ANGLE_PROXY_56_DEG", self.out.steeringAngleDeg))
-      proxy44 = cp_aux.vl.get("BRAKE_OR_REGEN_CANDIDATE_A", {})
-      self.eps_angle_proxy_44_raw = int(proxy44.get("EPS_ANGLE_PROXY_44_RAW", 0))
-      proxy44_deg = float(proxy44.get("EPS_ANGLE_PROXY_44_DEG", proxy56_deg))
-      ret.steeringAngleDeg = proxy56_deg if self.steering_angle_proxy_56_raw != 0 else proxy44_deg
+      eps_angle = cp_aux.vl.get("EPS_ANGLE", {})
+      eps_angle_cycle = int(eps_angle.get("EPS_ANGLE_CYCLE_RAW", -1))
+      if eps_angle_cycle == 0:
+        self.eps_angle_51_raw = int(eps_angle.get("EPS_ANGLE_RAW_WORD_B", self.eps_angle_51_raw))
+        ret.steeringAngleDeg = float(eps_angle.get("EPS_STEERING_ANGLE_BMW", self.out.steeringAngleDeg))
+      else:
+        ret.steeringAngleDeg = self.out.steeringAngleDeg
     steer_torque = cp_aux.vl.get("STEER_TORQUE", {})
     self.long_helper_49_wa = int(steer_torque.get("STEER_TORQUE_RAW_WORD_A", 0))
     self.long_helper_49_wb = int(steer_torque.get("STEER_TORQUE_RAW_WORD_B", 0))
@@ -510,7 +511,7 @@ class CarState(CarStateBase):
     ret.brake = min(1.0, brake_delta / 2060.0)
     ret.brakePressed = brake_delta > 10.0
 
-    drive_state = cp_aux.vl.get("DRIVE_STATE_EXPERIMENTAL", {})
+    drive_state = cp_aux.vl.get("DRIVE_STATE", {})
     drive_cycle = int(drive_state.get("DRIVE_STATE_CYCLE_COMPAT", 0))
     drive_kind_b11 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_11", 0))
     drive_kind_b14 = int(drive_state.get("DRIVE_STATE_KIND_BYTE_14", 0))
@@ -704,13 +705,14 @@ class CarState(CarStateBase):
       ("WHEEL_SPEED", float("nan")),
       ("VEHICLE_SPEED_PROV", float("nan")),
       ("STEER_TORQUE", float("nan")),
+      ("EPS_ANGLE", float("nan")),
       ("DYNAMICS_YAW_PROV", float("nan")),
       ("LONG_STATE_HELPER_D", float("nan")),
       ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
       ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
-      ("DRIVE_STATE_EXPERIMENTAL", float("nan")),
+      ("DRIVE_STATE", float("nan")),
       ("BRAKE_OR_REGEN_CANDIDATE_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),

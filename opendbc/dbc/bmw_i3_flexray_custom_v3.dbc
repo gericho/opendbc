@@ -57,6 +57,16 @@ BO_ 49 STEER_TORQUE: 17 BMW_I3
  SG_ STEER_TORQUE_STATUS_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
  CM_ BO_ 49 "Confirmed steering-torque helper. BMW-style driver torque lives in the 24|12 field and is valid on the cycle-0 subframe. CarState uses this path for steeringTorque/steeringPressed.";
 
+BO_ 51 EPS_ANGLE: 17 BMW_I3
+ SG_ EPS_ANGLE_CYCLE_RAW : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ EPS_ANGLE_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ EPS_ANGLE_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ EPS_ANGLE_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ EPS_ANGLE_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ EPS_STEERING_ANGLE_BMW : 24|16@1+ (0.0439453125,-1440) [-1440|1440] "deg" BMW_I3
+ CM_ BO_ 51 "BMW SP2018-style EPS angle frame aligned to dynm reference work. The m0/cycle-0 subframe carries the steering angle on bytes 3:4 using angle_deg = raw * 0.0439453125 - 1440.0.";
+ CM_ SG_ 51 EPS_STEERING_ANGLE_BMW "Primary FlexRay EPS steering-angle candidate aligned to dynm BMW SP2018 reference: steering_angle m0 : 24|16@1+ (0.0439453125,-1440).";
+
 BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
  SG_ VEHICLE_SPEED_CYCLE_RAW M : 0|2@1+ (1,0) [0|3] "" BMW_I3
  SG_ VEHICLE_SPEED_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -77,11 +87,11 @@ BO_ 56 DYNAMICS_YAW_PROV: 17 BMW_I3
  SG_ YAW_RATE_RAW_B : 24|16@1- (0.01,0) [-500|500] "deg/s" BMW_I3
  SG_ STEERING_ANGLE_PROXY_56_RAW : 88|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ STEERING_ANGLE_PROXY_56_DEG : 88|16@1+ (0.0260328634,-851.998806) [-720|720] "deg" BMW_I3
- CM_ BO_ 56 "Confirmed vehicle-dynamics helper. Raw yaw fields are used for reverse-engineering correlation, especially while comparing stock lateral behavior against shadow steering logic. Historical CAN+FlexRay route 00000402 also shows the late word at bytes 11..12 tracks PT-CAN 770 strongly enough to serve as the current best FlexRay-only steering-angle proxy.";
- CM_ SG_ 56 STEERING_ANGLE_PROXY_56_RAW "Best current FlexRay-only steering-angle proxy. On route 00000402 with PT-CAN 770 present, the src1 field at byte offset 11..12 reached corr ~= 0.969 against the 770 steering angle, clearly outperforming the old 0x44 proxy.";
- CM_ SG_ 56 STEERING_ANGLE_PROXY_56_DEG "FlexRay-only steering-angle estimate derived from STEERING_ANGLE_PROXY_56_RAW using the current best fit against PT-CAN 770 on route 00000402: angle_deg ~= 0.0260328634 * raw56 - 851.998806. Promote this as the primary steeringAngleDeg source when PT-CAN is absent.";
+CM_ BO_ 56 "Confirmed vehicle-dynamics helper. Raw yaw fields remain useful for reverse-engineering and stock lateral comparison work. The late word at bytes 11..12 is kept only as a secondary steering-angle debug/support candidate now that frame 51 is promoted.";
+CM_ SG_ 56 STEERING_ANGLE_PROXY_56_RAW "Secondary debug/support steering-angle proxy from route 00000402 fitting against PT-CAN 770. Keep for analysis only; no longer the primary steeringAngleDeg source.";
+CM_ SG_ 56 STEERING_ANGLE_PROXY_56_DEG "Debug/support steering-angle estimate derived from STEERING_ANGLE_PROXY_56_RAW using the historical fit angle_deg ~= 0.0260328634 * raw56 - 851.998806. Not the primary steeringAngleDeg source anymore.";
 
-BO_ 40 DRIVE_STATE_EXPERIMENTAL: 17 BMW_I3
+BO_ 40 DRIVE_STATE: 17 BMW_I3
  SG_ DRIVE_STATE_CYCLE_COMPAT : 0|2@1+ (1,0) [0|3] "" BMW_I3
  SG_ DRIVE_STATE_RAW : 8|16@1+ (1,0) [0|65535] "" BMW_I3
   SG_ DRIVE_MODE_RAW : 24|8@1+ (1,0) [0|255] "" BMW_I3
@@ -89,7 +99,7 @@ BO_ 40 DRIVE_STATE_EXPERIMENTAL: 17 BMW_I3
  SG_ DRIVE_STATE_P_LOCKED_M3_COMPAT : 49|1@1+ (1,0) [0|1] "" BMW_I3
  SG_ DRIVE_STATE_KIND_BYTE_11 : 88|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ DRIVE_STATE_KIND_BYTE_14 : 112|8@1+ (1,0) [0|255] "" BMW_I3
- CM_ BO_ 40 "Experimental drive-state frame. Cross-check against dynm BMW SP2018 FlexRay DBC shows this frame is the closest local match to their maybe_gear_switch frame, so helper signals for cycle_count, GEAR m3, and P_locked m3 are exposed here for analysis. Current i3 parked routes do not yet separate P/D/N/R robustly enough to use these helpers directly in CarState.";
+CM_ BO_ 40 "Production drive-state frame. Cross-check against dynm BMW SP2018 FlexRay DBC shows this frame is the closest local match to their maybe_gear_switch frame, and current i3 routes support using its cycle_count plus the byte-11/byte-14 discriminator path as the primary FlexRay gear source in CarState.";
 
 BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
  SG_ BRAKE_REGEN_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -97,8 +107,8 @@ BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
  SG_ EPS_ANGLE_PROXY_44_RAW : 105|12@1- (1,0) [-2048|2047] "" BMW_I3
  SG_ EPS_ANGLE_PROXY_44_DEG : 105|12@1- (0.0835794,3.3976) [-720|720] "deg" BMW_I3
  CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental secondary longitudinal candidate. Across historical TJA routes 00000054/55 and modern ACC-only route 000000b3, this frame separates dynamic phases weakly but remains far less informative than 54 and 59 for manual pedal vs managed-following behavior.";
- CM_ SG_ 44 EPS_ANGLE_PROXY_44_RAW "Legacy experimental steering-angle proxy from earlier route fitting. Keep for debug/fallback only. Recent whole-route checks show it often stays nearly flat while the stronger src1/56 late-word proxy remains dynamic.";
- CM_ SG_ 44 EPS_ANGLE_PROXY_44_DEG "Legacy debug-only steering-angle estimate derived from EPS_ANGLE_PROXY_44_RAW. Do not treat as the primary steeringAngleDeg source anymore.";
+CM_ SG_ 44 EPS_ANGLE_PROXY_44_RAW "Legacy experimental steering-angle proxy from earlier route fitting. Keep for debug only. Recent whole-route checks show it often stays nearly flat and it is no longer used for steeringAngleDeg.";
+CM_ SG_ 44 EPS_ANGLE_PROXY_44_DEG "Legacy debug-only steering-angle estimate derived from EPS_ANGLE_PROXY_44_RAW. No production steeringAngleDeg use.";
 
 BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
  SG_ LONG_TX_BRAKE_BLEND_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3

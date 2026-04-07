@@ -11,6 +11,7 @@ class CarController(CarControllerBase):
   LAT96_MATCH_DELTA_BP = [0.0, 3.0, 8.0, 15.0]
   LAT96_MATCH_DELTA_V = [3.0, 4.0, 6.0, 7.0]
   LAT96_SAFE_ERROR_DEG = 12.0
+  LAT96_MAX_COMMAND_DEG = 12.0
   LAT96_TARGET_DEADBAND_DEG = 1.0
   LAT96_TARGET_CMD_FULL_SCALE_DEG = 8.0
   LONG_59_ACTIVE_PARITY = 0
@@ -308,6 +309,7 @@ class CarController(CarControllerBase):
       desired_angle = apply_steer_angle_limits_vm(desired_angle, self.apply_angle_last, CS.out.vEgoRaw, CS.out.steeringAngleDeg,
                                                   True, CarControllerParams, self.VM)
       desired_angle = self._match_desired_angle_to_current(desired_angle, CS.out.steeringAngleDeg, CS.out.vEgoRaw)
+      desired_angle = max(-self.LAT96_MAX_COMMAND_DEG, min(self.LAT96_MAX_COMMAND_DEG, desired_angle))
       self.apply_angle_last = desired_angle
 
     lateral_tx = self._build_shadow_lateral_tx(CC, CS, desired_angle)

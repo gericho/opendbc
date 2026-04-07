@@ -294,9 +294,7 @@ class CarState(CarStateBase):
       self.vehicle_speed_kph = float(vehicle_speed.get("VEHICLE_SPEED_BMW", self.vehicle_speed_kph))
     ret.vEgoRaw = self.vehicle_speed_kph * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-    # The cluster consistently reads about 1 kph higher than the raw FlexRay
-    # vehicle-speed value, so keep the UI-aligned offset only on the cluster path.
-    ret.vEgoCluster = ret.vEgoRaw + CV.KPH_TO_MS
+    ret.vEgoCluster = ret.vEgoRaw
     ret.standstill = ret.vEgoRaw < 0.1
 
     if use_ptcan:

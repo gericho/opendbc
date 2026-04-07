@@ -19,27 +19,8 @@ class CarState(CarStateBase):
   _ASSIST_MODE_ACC = 1
   _ASSIST_MODE_TJA = 2
 
-  # Current best i3 route-backed interpretation of stock lateral frame 72:
-  # the useful raw command proxy is discrete and phase-local, not a single
-  # analog byte. We expose it diagnostically as:
-  #   phase  = 72.byte0 >> 1
-  #   nibble = low nibble of 72.byte2
-  #   z72    = phase - 1.075 * nibble
-  _LAT72_POS_NIBBLE_BY_PHASE = {
-    0: 4, 1: 5, 2: 6, 3: 7, 4: 8, 5: 9, 6: 10, 7: 11,
-    8: 12, 9: 13, 10: 14, 11: 0, 12: 1, 13: 2, 14: 3, 15: 4,
-    16: 3, 17: 4, 18: 7, 19: 6, 20: 7, 21: 8, 22: 9, 23: 10,
-    24: 11, 25: 12, 26: 13, 27: 14, 28: 0, 29: 1, 30: 2, 31: 3,
-  }
-  _LAT72_NEG_NIBBLE_BY_PHASE = {
-    0: 5, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12,
-    8: 13, 9: 14, 10: 0, 11: 14, 12: 0, 13: 1, 14: 2, 15: 3,
-    16: 4, 17: 5, 18: 6, 19: 7, 20: 8, 21: 9, 22: 10, 23: 11,
-    24: 12, 25: 13, 26: 14, 27: 0, 28: 1, 29: 2, 30: 3, 31: 4,
-  }
-
   # Practical route-backed lateral decoder on the i3 is phase-local:
-  #   selector  -> 72.byte0
+  #   selector  -> 96.byte0
   #   payload   -> 96.byte1
   #   support   -> 96.byte2
   # Values are medians from route 00000402 TJA-only labeling.
@@ -132,22 +113,16 @@ class CarState(CarStateBase):
     self.driver_steer_torque = 0.0
     self.driver_steer_pressed = False
     self.vehicle_speed_kph = 0.0
-    self.stock_lat72_phase = 0
-    self.stock_lat72_cmd_phase = 0
-    self.stock_lat72_cnt_nibble = 0
-    self.stock_lat72_z72 = 0.0
-    self.stock_lat72_signed_state = 0
-    self.stock_lat72_state_confidence = "none"
     self.stock_lat60_phase = 0
     self.stock_lat60_cmd_phase = 0
     self.stock_lat60_subframe = 0
-    self.stock_lat72_err3 = 0
-    self.stock_lat72_err4 = 0
-    self.stock_lat72_orbit_match = False
     self.stock_lat96_phase = 0
     self.stock_lat96_b1 = 0
     self.stock_lat96_b2 = 0
     self.stock_lat96_b3 = 0
+    self.stock_lat96_b4 = 0
+    self.stock_lat96_b8 = 0
+    self.stock_lat96_template = bytes([0xFF] * 9)
     self.stock_lat112_b5 = 0
     self.stock_lat116_b5 = 0
     self.stock_lat_active_hint = False
@@ -212,23 +187,6 @@ class CarState(CarStateBase):
     if span <= 1e-6:
       return (0.0, "none")
     return (min(1.0, abs(float(b2) - center) / span), "low")
-
-  @staticmethod
-  def _stock_lat72_discrete_state(phase_raw: int, cnt_nibble: int) -> tuple[int, float, str]:
-    phase = (int(phase_raw) >> 1) & 0x1F
-    nibble = int(cnt_nibble) & 0x0F
-    z72 = float(phase) - 1.075 * float(nibble)
-    pos_nibble = CarState._LAT72_POS_NIBBLE_BY_PHASE.get(phase)
-    neg_nibble = CarState._LAT72_NEG_NIBBLE_BY_PHASE.get(phase)
-    if pos_nibble is not None and nibble == pos_nibble:
-      return (1, z72, "medium")
-    if neg_nibble is not None and nibble == neg_nibble:
-      return (-1, z72, "medium")
-    return (0, z72, "low")
-
-  @staticmethod
-  def _wrap_orbit_err(nibble: int, target: int) -> int:
-    return ((int(nibble) - int(target) + 8) % 16) - 8
 
   @staticmethod
   def _lat_phase_entry(phase: int) -> dict | None:
@@ -380,6 +338,7 @@ class CarState(CarStateBase):
     self.long_helper_56_wb = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_B", 0))
     self.long_helper_56_wc = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_C", 0))
     self.long_helper_56_wd = int(dynamics_yaw.get("DYNAMICS_YAW_RAW_WORD_D", 0))
+
     # No physical brake-pressure value is closed yet.
     ret.brake = 0.0
 
@@ -457,21 +416,22 @@ class CarState(CarStateBase):
     self.stock_lat60_cmd_phase = int(lat60.get("LAT_STOCK_TRIGGER_CMD_PHASE", 0))
     self.stock_lat60_subframe = int(lat60.get("LAT_STOCK_TRIGGER_SUBFRAME_LSB", 0))
 
-    lat72 = cp_state.vl.get("LAT_STOCK_TX_CANDIDATE", {})
-    self.stock_lat72_phase = int(lat72.get("LAT_STOCK_TX_PHASE_BYTE_0", 0))
-    self.stock_lat72_cmd_phase = (self.stock_lat72_phase >> 1) & 0x1F
-    self.stock_lat72_cnt_nibble = int(lat72.get("LAT_STOCK_TX_CNT_NIBBLE", 0))
-    self.stock_lat72_signed_state, self.stock_lat72_z72, self.stock_lat72_state_confidence = self._stock_lat72_discrete_state(
-      self.stock_lat72_phase, self.stock_lat72_cnt_nibble,
-    )
-    self.stock_lat72_err3 = self._wrap_orbit_err(self.stock_lat72_cnt_nibble, (self.stock_lat72_cmd_phase + 3) & 0x0F)
-    self.stock_lat72_err4 = self._wrap_orbit_err(self.stock_lat72_cnt_nibble, (self.stock_lat72_cmd_phase + 4) & 0x0F)
-    self.stock_lat72_orbit_match = self.stock_lat72_err3 == 0 or self.stock_lat72_err4 == 0
     lat96 = cp_state.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
     self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
     self.stock_lat96_b2 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_2", 0))
     self.stock_lat96_b3 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_3", 0))
+    self.stock_lat96_b4 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_4", 0xFF))
+    self.stock_lat96_b8 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_8", 0xFF))
+    self.stock_lat96_template = bytes((
+      self.stock_lat96_phase & 0xFF,
+      self.stock_lat96_b1 & 0xFF,
+      self.stock_lat96_b2 & 0xFF,
+      self.stock_lat96_b3 & 0xFF,
+      self.stock_lat96_b4 & 0xFF,
+      0xFF, 0xFF, 0xFF,
+      self.stock_lat96_b8 & 0xFF,
+    ))
     lat112 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
     lat116 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
     self.stock_lat112_b5 = int(lat112.get("LAT_STOCK_MAIN_BYTE_5", 0))
@@ -481,7 +441,7 @@ class CarState(CarStateBase):
     #   112.byte5 bit5 clear -> assisted/TJA tendency
     self.stock_lat_active_hint = (self.stock_lat112_b5 & 0x20) == 0
 
-    phase_for_decode = self.stock_lat72_phase
+    phase_for_decode = self.stock_lat96_phase
     self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b1(phase_for_decode, self.stock_lat96_b1)
     self.stock_lat_mag_hint, self.stock_lat_mag_confidence = self._stock_lat_mag_from_phase_b1(phase_for_decode, self.stock_lat96_b1)
     if not self.stock_lat_active_hint:
@@ -535,14 +495,11 @@ class CarState(CarStateBase):
     self.stock_acc_ctrl_gate = stock_ctrl_gate
     self.stock_acc_base_armed = stock_ctrl_state == 16610
     self.stock_assist_advanced = stock_ctrl_state == 24802
-    # Newer realdata routes no longer hold a single rigid 135 family for managed
-    # TJA. Keep the old 24802 path, but also accept the modern branch when the
-    # SAS-side 60->72 burst is alive, 72 is on its expected orbit, and the old
-    # 135 helper is not in the manual/off baseline.
+    # Modern routes show the real stock command on frame 96. Treat 96 byte3 as
+    # the family marker and require the 112 active hint before calling it managed.
     stock_tja_modern = (
       self.stock_lat_active_hint and
-      self.stock_lat72_orbit_match and
-      self.stock_lat60_phase == self.stock_lat72_phase and
+      self.stock_lat96_b3 in (0x21, 0xE0) and
       stock_ctrl_state not in (0, 35041)
     )
     self.stock_tja_active = self.stock_assist_advanced or stock_tja_modern
@@ -681,7 +638,6 @@ class CarState(CarStateBase):
     dbc = DBC[CP.carFingerprint][Bus.pt]
     pt_messages = [
       ("LAT_STOCK_TX_TRIGGER_CANDIDATE", float("nan")),
-      ("LAT_STOCK_TX_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_D", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_E", float("nan")),

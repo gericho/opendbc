@@ -8,25 +8,11 @@ from opendbc.car.bmw.values import CarControllerParams
 class CarController(CarControllerBase):
   ENABLE_LONG_TX_BUILDER = True
   ENABLE_LATERAL_TX_BUILDER = True
-  LAT72_ANGLE_FULL_SCALE_DEG = 30.0
-  LAT72_MATCH_DELTA_BP = [0.0, 3.0, 8.0, 15.0]
-  LAT72_MATCH_DELTA_V = [3.0, 4.0, 6.0, 7.0]
-  LAT72_SAFE_ERROR_DEG = 12.0
-  LAT72_TARGET_DEADBAND_DEG = 1.5
-  LAT72_TARGET_CMD_MIN_DEG = 2.5
-  LAT72_OFFSET_SPAN = 4
-  LAT72_POS_NIBBLE_BY_PHASE = {
-    0: 4, 1: 5, 2: 6, 3: 7, 4: 8, 5: 9, 6: 10, 7: 11,
-    8: 12, 9: 13, 10: 14, 11: 0, 12: 1, 13: 2, 14: 3, 15: 4,
-    16: 3, 17: 4, 18: 7, 19: 6, 20: 7, 21: 8, 22: 9, 23: 10,
-    24: 11, 25: 12, 26: 13, 27: 14, 28: 0, 29: 1, 30: 2, 31: 3,
-  }
-  LAT72_NEG_NIBBLE_BY_PHASE = {
-    0: 5, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12,
-    8: 13, 9: 14, 10: 0, 11: 14, 12: 0, 13: 1, 14: 2, 15: 3,
-    16: 4, 17: 5, 18: 6, 19: 7, 20: 8, 21: 9, 22: 10, 23: 11,
-    24: 12, 25: 13, 26: 14, 27: 0, 28: 1, 29: 2, 30: 3, 31: 4,
-  }
+  LAT96_MATCH_DELTA_BP = [0.0, 3.0, 8.0, 15.0]
+  LAT96_MATCH_DELTA_V = [3.0, 4.0, 6.0, 7.0]
+  LAT96_SAFE_ERROR_DEG = 12.0
+  LAT96_TARGET_DEADBAND_DEG = 1.0
+  LAT96_TARGET_CMD_FULL_SCALE_DEG = 8.0
   LONG_59_ACTIVE_PARITY = 0
   LONG_54_ACTIVE_PARITY = 1
   LONG_59_CENTER_WB = 32777
@@ -203,60 +189,57 @@ class CarController(CarControllerBase):
       "tx_desired_accel": desired_accel,
     }
 
-  @staticmethod
-  def _wrap15(value: int) -> int:
-    return value % 15
-
-  @staticmethod
-  def _build_i3_like_visible_72(phase: int, target_nibble: int) -> bytes:
-    payload = bytearray([0] * 16)
-    payload[0] = phase & 0xFF
-    if phase & 0x01:
-      # Real i3 control branch layout is:
-      #   byte0 = phase/subframe
-      #   byte1 = 0xFF
-      #   byte2 = 0xF? where low nibble carries the command-state orbit
-      #   byte3..7 = 0xFF
-      #   byte8 = 0xE0
-      #   byte9..15 = 0xFF
-      payload[1] = 0xFF
-      payload[2] = 0xF0 | (CarController._wrap15(target_nibble) & 0x0F)
-      payload[3:8] = b"\xFF" * 5
-      payload[8] = 0xE0
-      payload[9:16] = b"\xFF" * 7
-    return bytes(payload)
-
   @classmethod
   def _match_desired_angle_to_current(cls, desired_angle: float, current_angle: float, v_ego: float) -> float:
-    if v_ego <= cls.LAT72_MATCH_DELTA_BP[0]:
-      max_delta = cls.LAT72_MATCH_DELTA_V[0]
-    elif v_ego >= cls.LAT72_MATCH_DELTA_BP[-1]:
-      max_delta = cls.LAT72_MATCH_DELTA_V[-1]
+    if v_ego <= cls.LAT96_MATCH_DELTA_BP[0]:
+      max_delta = cls.LAT96_MATCH_DELTA_V[0]
+    elif v_ego >= cls.LAT96_MATCH_DELTA_BP[-1]:
+      max_delta = cls.LAT96_MATCH_DELTA_V[-1]
     else:
-      max_delta = cls.LAT72_MATCH_DELTA_V[-1]
-      for i in range(len(cls.LAT72_MATCH_DELTA_BP) - 1):
-        x0 = cls.LAT72_MATCH_DELTA_BP[i]
-        x1 = cls.LAT72_MATCH_DELTA_BP[i + 1]
+      max_delta = cls.LAT96_MATCH_DELTA_V[-1]
+      for i in range(len(cls.LAT96_MATCH_DELTA_BP) - 1):
+        x0 = cls.LAT96_MATCH_DELTA_BP[i]
+        x1 = cls.LAT96_MATCH_DELTA_BP[i + 1]
         if x0 <= v_ego <= x1:
-          y0 = cls.LAT72_MATCH_DELTA_V[i]
-          y1 = cls.LAT72_MATCH_DELTA_V[i + 1]
+          y0 = cls.LAT96_MATCH_DELTA_V[i]
+          y1 = cls.LAT96_MATCH_DELTA_V[i + 1]
           t = 0.0 if x1 == x0 else (v_ego - x0) / (x1 - x0)
           max_delta = y0 + (y1 - y0) * t
           break
     delta = max(-max_delta, min(max_delta, float(desired_angle - current_angle)))
     return float(current_angle + delta)
 
-  def _lat72_target_nibble(self, desired_angle: float, current_angle: float, stock_nibble: int, cmd_phase: int) -> int:
-    error = float(desired_angle - current_angle)
-    if abs(error) < self.LAT72_TARGET_DEADBAND_DEG:
-      return self._wrap15(stock_nibble)
+  @staticmethod
+  def _interp_target(center: float, left: float, right: float, cmd_norm: float) -> int:
+    if cmd_norm >= 0.0:
+      target = center + cmd_norm * (left - center)
+    else:
+      target = center + (-cmd_norm) * (right - center)
+    return int(max(0, min(255, round(target))))
 
-    phase = int(cmd_phase) & 0x1F
-    if error > self.LAT72_TARGET_CMD_MIN_DEG:
-      return self._wrap15(self.LAT72_POS_NIBBLE_BY_PHASE.get(phase, stock_nibble))
-    if error < -self.LAT72_TARGET_CMD_MIN_DEG:
-      return self._wrap15(self.LAT72_NEG_NIBBLE_BY_PHASE.get(phase, stock_nibble))
-    return self._wrap15(stock_nibble)
+  def _build_stock_like_visible_96(self, CS, desired_angle: float, lat_allowed: bool) -> bytes:
+    live = bytearray(getattr(CS, "stock_lat96_template", bytes([0xFF] * 9)))
+    if len(live) != 9:
+      live = bytearray([0xFF] * 9)
+    live[0] = int(getattr(CS, "stock_lat96_phase", live[0])) & 0xFF
+    if not lat_allowed:
+      return bytes(live)
+
+    angle_error = float(desired_angle - CS.out.steeringAngleDeg)
+    if abs(angle_error) < self.LAT96_TARGET_DEADBAND_DEG:
+      return bytes(live)
+
+    cmd_norm = max(-1.0, min(1.0, angle_error / self.LAT96_TARGET_CMD_FULL_SCALE_DEG))
+    phase = int(live[0]) & 0xFF
+    row = getattr(CS, "_LAT_B1_PHASE_MAP", {}).get(phase)
+    if row is not None:
+      live[1] = self._interp_target(float(row["center"]), float(row["left"]), float(row["right"]), cmd_norm)
+
+    phase_entry = CS._lat_phase_entry(phase) if hasattr(CS, "_lat_phase_entry") else None
+    if phase_entry is not None and all(k in phase_entry for k in ("L_b2", "C_b2", "R_b2")):
+      live[2] = self._interp_target(float(phase_entry["C_b2"]), float(phase_entry["L_b2"]), float(phase_entry["R_b2"]), cmd_norm)
+
+    return bytes(live)
 
   def _lateral_tx_readiness(self, CC, CS) -> tuple[bool, str]:
     reasons = []
@@ -266,8 +249,8 @@ class CarController(CarControllerBase):
       reasons.append("op_disabled")
     if not bool(CC.latActive):
       reasons.append("lat_inactive")
-    if int(getattr(CS, "stock_lat60_phase", -1)) != int(getattr(CS, "stock_lat72_phase", -2)):
-      reasons.append("60_72_phase_mismatch")
+    if not bool(getattr(CS, "stock_lat_active_hint", False)):
+      reasons.append("stock_lat_hint_off")
     ready = len(reasons) == 0
     return ready, "ready" if ready else "|".join(reasons)
 
@@ -276,18 +259,12 @@ class CarController(CarControllerBase):
     dir_hint = str(getattr(CS, "stock_lat_dir_hint", "unknown"))
     mag = float(getattr(CS, "stock_lat_mag_hint", 0.0))
     trigger_phase = int(getattr(CS, "stock_lat60_phase", 0)) & 0xFF
-    phase = int(getattr(CS, "stock_lat72_phase", 0)) & 0xFF
-    predicted_phase = (phase + 4) & 0x3F
-    cmd_phase = (predicted_phase >> 1) & 0x1F
-    stock_nibble = int(getattr(CS, "stock_lat72_cnt_nibble", 0)) & 0x0F
-    target_nibble = stock_nibble
-    if lat_allowed:
-      target_nibble = self._lat72_target_nibble(desired_angle, CS.out.steeringAngleDeg, stock_nibble, cmd_phase)
-    visible72 = self._build_i3_like_visible_72(predicted_phase, target_nibble)
+    phase = int(getattr(CS, "stock_lat96_phase", 0)) & 0xFF
+    visible96 = self._build_stock_like_visible_96(CS, desired_angle, lat_allowed)
     lat_tx_ready, lat_tx_reason = self._lateral_tx_readiness(CC, CS)
     return {
+      "lat_builder_mode": "96_draft",
       "lat_phase": phase,
-      "lat_match_phase": predicted_phase,
       "lat_trigger_phase": trigger_phase,
       "lat_dir_hint": dir_hint,
       "lat_mag_hint": mag,
@@ -295,39 +272,24 @@ class CarController(CarControllerBase):
       "lat_tx_reason": lat_tx_reason,
       "lat_tx_enabled": self.enable_lateral_tx_builder,
       "lat_tx_msg_count": 1 if self.enable_lateral_tx_builder and lat_allowed and lat_tx_ready else 0,
-      "lat72_stock_nibble": stock_nibble,
-      "lat72_cmd_phase": cmd_phase,
-      "lat72_target_nibble": target_nibble,
-      "lat72_err3": int(getattr(CS, "stock_lat72_err3", 0)),
-      "lat72_err4": int(getattr(CS, "stock_lat72_err4", 0)),
-      "lat72_orbit_match": bool(getattr(CS, "stock_lat72_orbit_match", False)),
-      "lat72_current_angle": float(CS.out.steeringAngleDeg),
-      "lat72_desired_angle": float(desired_angle),
-      "lat72_angle_error": float(desired_angle - CS.out.steeringAngleDeg),
-      "tx72_hex": visible72.hex(),
-      "tx96_hex": "",
+      "lat96_current_angle": float(CS.out.steeringAngleDeg),
+      "lat96_desired_angle": float(desired_angle),
+      "lat96_angle_error": float(desired_angle - CS.out.steeringAngleDeg),
+      "tx96_hex": visible96.hex(),
     }
 
   def _build_lateral_can_msgs(self, CC, lateral_tx):
     lat_allowed = bool(CC.enabled and CC.latActive)
     if not (self.enable_lateral_tx_builder and lat_allowed and bool(lateral_tx.get("lat_tx_ready", False))):
       return []
-    phase72 = int(lateral_tx.get("lat_phase", 0)) & 0xFF
-    # Current Pico firmware arms the 60->72 injector on cycle_base=1 only.
-    # Keep the host-side override aligned to that bucket instead of queuing a
-    # phase-sensitive payload that may get consumed on a later, mismatched cycle.
-    if (phase72 & 0x03) != 0x01:
+    desired_angle = float(lateral_tx.get("lat96_desired_angle", 0.0))
+    current_angle = float(lateral_tx.get("lat96_current_angle", 0.0))
+    if abs(desired_angle - current_angle) > self.LAT96_SAFE_ERROR_DEG:
       return []
-    desired_angle = float(lateral_tx.get("lat72_desired_angle", 0.0))
-    current_angle = float(lateral_tx.get("lat72_current_angle", 0.0))
-    if abs(desired_angle - current_angle) > self.LAT72_SAFE_ERROR_DEG:
-      return []
-    tx72 = bytes.fromhex(str(lateral_tx["tx72_hex"]))
-    base72 = 0x01
-    # Dynm-style i3 firmware currently patches frame 72 via the visible 16-byte
-    # body, keyed by a fixed cycle_base=1 on trigger 60 -> target 72.
+    tx96 = bytes.fromhex(str(lateral_tx["tx96_hex"]))
+    base96 = 0x01
     return [
-      (72, bytes([base72]) + tx72[:16], 0),
+      (96, bytes([base96]) + tx96[:9], 0),
     ]
 
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS, now_nanos):
@@ -418,14 +380,13 @@ class CarController(CarControllerBase):
       **long_tx_core,
       **long_tx_hint,
       **lateral_tx,
-      "lat72_override_hex": lateral_can_msgs[0][1].hex() if lateral_can_msgs else "",
-      "lat72_override_base": lateral_can_msgs[0][1][0] if lateral_can_msgs else -1,
-      "lat96_override_hex": "",
-      "lat96_override_base": -1,
+      "lat96_override_hex": lateral_can_msgs[0][1].hex() if lateral_can_msgs else "",
+      "lat96_override_base": lateral_can_msgs[0][1][0] if lateral_can_msgs else -1,
       "desired_angle": float(desired_angle),
       "lat_allowed": lat_allowed,
       "stock_acc_lateral_gate": False,
       "stock_lat_active_hint": bool(getattr(CS, "stock_lat_active_hint", False)),
+      "stock_lat96_phase": int(getattr(CS, "stock_lat96_phase", 0)),
       "stock_lat96_b1": int(getattr(CS, "stock_lat96_b1", 0)),
       "stock_lat96_b2": int(getattr(CS, "stock_lat96_b2", 0)),
       "stock_lat96_b3": int(getattr(CS, "stock_lat96_b3", 0)),

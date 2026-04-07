@@ -142,21 +142,10 @@ BO_ 60 LAT_STOCK_TX_TRIGGER_CANDIDATE: 17 BMW_I3
  SG_ LAT_STOCK_TRIGGER_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_TRIGGER_SUBFRAME_LSB : 0|2@1+ (1,0) [0|3] "" BMW_I3
  SG_ LAT_STOCK_TRIGGER_CMD_PHASE : 1|5@1+ (1,0) [0|31] "" BMW_I3
-CM_ BO_ 60 "Primary SAS-side predecessor/trigger for the stock lateral burst on the i3. Latest route work now treats frame 96 as the active payload candidate and frame 72 as a legacy envelope/orbit companion. Frame 60 itself remains structurally near-empty outside byte0, so treat it as the scheduler/trigger half of the burst rather than the analog steering payload.";
+CM_ BO_ 60 "Primary SAS-side predecessor/trigger for the stock lateral burst on the i3. Latest route work now treats frame 96 as the active payload candidate. Frame 60 itself remains structurally near-empty outside byte0, so treat it as the scheduler/trigger half of the burst rather than the analog steering payload.";
 CM_ SG_ 60 LAT_STOCK_TRIGGER_PHASE_BYTE_0 "Raw scheduler byte for the SAS-side lateral burst. This remains the practical trigger byte for firmware-aligned injection work.";
 CM_ SG_ 60 LAT_STOCK_TRIGGER_SUBFRAME_LSB "Low two bits of frame-60 byte0. Useful when reconstructing the four-subframe burst order observed in the SAS 20 ms lateral scheduler.";
 CM_ SG_ 60 LAT_STOCK_TRIGGER_CMD_PHASE "Derived command-phase view of frame-60 byte0 (byte0 >> 1). Keep as a coarse scheduler helper while the real command stays phase-local on frame 96.";
-
-BO_ 72 LAT_STOCK_TX_CANDIDATE: 17 BMW_I3
- SG_ LAT_STOCK_TX_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_TX_CNT_NIBBLE : 16|4@1+ (1,0) [0|15] "" BMW_I3
- SG_ LAT_STOCK_TX_CONST_F_NIBBLE : 20|4@1+ (1,0) [0|15] "" BMW_I3
- SG_ LAT_STOCK_TX_FLAG_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 72 "Legacy envelope/orbit companion for the i3 SAS-side lateral stream. Current route work no longer treats 72 as the main command payload; frame 96 is the active payload candidate, while 72 is best understood as a structural phase/envelope frame that accompanies the burst.";
-CM_ SG_ 72 LAT_STOCK_TX_PHASE_BYTE_0 "Phase/subframe byte for the legacy lateral envelope frame. Keep raw for diagnostics and historical route comparison.";
-CM_ SG_ 72 LAT_STOCK_TX_CNT_NIBBLE "Low nibble of byte2 in the legacy lateral envelope frame. Keep raw for diagnostics and historical orbit work, not as the active runtime command.";
-CM_ SG_ 72 LAT_STOCK_TX_CONST_F_NIBBLE "Constant high nibble 0xF in the lateral TX envelope byte pair. Treat as structural filler/format marker rather than command content.";
-CM_ SG_ 72 LAT_STOCK_TX_FLAG_BYTE_8 "Structurally stable tail byte, usually 0xE0 in current captures. Treat as fixed envelope/flag content unless future replay work proves otherwise.";
 
 BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -190,7 +179,7 @@ BO_ 96 LAT_STOCK_TX_PAYLOAD_CANDIDATE: 9 BMW_I3
  SG_ LAT_STOCK_TX_PAYLOAD_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_TX_PAYLOAD_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_TX_PAYLOAD_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 96 "Primary stock lateral TX payload candidate and current active draft-TX target. Routes 00000401 and 00000006 confirmed that src0/96 changes coherently during real managed-steering windows while src0/72 behaves like the outer envelope. The practical decoder remains phase-local and family-specific rather than a single global scale in degrees. Current runtime draft TX copies the live 96 family and only nudges the command bytes phase-locally.";
+CM_ BO_ 96 "Primary stock lateral TX payload candidate and current active draft-TX target. Routes 00000401 and 00000006 confirmed that src0/96 changes coherently during real managed-steering windows. The practical decoder remains phase-local and family-specific rather than a single global scale in degrees. Current runtime draft TX copies the live 96 family and only nudges the command bytes phase-locally.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_0 "Phase/family byte inside the current best lateral TX payload frame. Use as the primary phase-local selector for frame 96.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_1 "Best current direction-discriminating byte in the stock lateral TX payload. Decode phase-locally with frame 96 byte0; do not treat byte1 as a global signed angle scale because the numeric direction flips across phase families.";
 CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_2 "Auxiliary payload byte that moves with steering activity but is not yet isolated as a standalone signed magnitude. Relative to dynm/smnogar BMW SP2018 references, byte2 is the best current i3 candidate for a torque/intensity-like companion to byte1, but it is weaker than byte1 and should not be used as the primary direction discriminator.";

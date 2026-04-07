@@ -524,16 +524,12 @@ class CarState(CarStateBase):
     # 16610/3584 -> ACC base armed/ready state
     # 24802/(640 or 656) -> advanced assist state / actual managed-control branch
     acc_enabled = stock_ctrl_state in (16610, 24802)
-    # Keep engagement unblocked on the flexray-only port even when the stock ACC
-    # state machine does not expose a clean PCM-active edge. Presence of the stock
-    # control helpers or a legacy ACC/TJA button press is enough to treat the
-    # system as available for openpilot button-based enable.
+    # Keep availability conservative on the flexray-only port:
+    # only show engageable when the car is actually in drive and the stock
+    # ACC/TJA stack is armed, or while a real stock assist button edge is seen.
     acc_available = (
-      acc_enabled or
-      stock_ctrl_state != 0 or
-      stock_ctrl_gate != 0 or
-      self.stock_acc_button or
-      self.stock_tja_button
+      ret.gearShifter == structs.CarState.GearShifter.drive and
+      (acc_enabled or self.stock_acc_button or self.stock_tja_button)
     )
 
     ret.cruiseState.available = acc_available
@@ -614,9 +610,10 @@ class CarState(CarStateBase):
         mode_counts = Counter(self.stock_assist_mode_hist)
         stable_mode, stable_votes = mode_counts.most_common(1)[0]
         if stable_votes == self.stock_assist_mode_hist.maxlen and stable_mode != self.stock_assist_mode_stable:
-          if self.stock_assist_mode_stable == self._ASSIST_MODE_OFF and stable_mode in (self._ASSIST_MODE_ACC, self._ASSIST_MODE_TJA):
-            legacy_events.append(structs.CarState.ButtonEvent(pressed=False, type=ButtonType.decelCruise))
-          elif stable_mode == self._ASSIST_MODE_OFF and self.stock_assist_mode_stable in (self._ASSIST_MODE_ACC, self._ASSIST_MODE_TJA):
+          # Do not synthesize enable events from stock ACC/TJA state transitions:
+          # that can auto-enable OP as soon as the OEM system arms. Keep only the
+          # disable-side cancel when the stock system drops out.
+          if stable_mode == self._ASSIST_MODE_OFF and self.stock_assist_mode_stable in (self._ASSIST_MODE_ACC, self._ASSIST_MODE_TJA):
             legacy_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.cancel))
           elif self.stock_assist_mode_stable == self._ASSIST_MODE_TJA and stable_mode == self._ASSIST_MODE_ACC:
             legacy_events.append(structs.CarState.ButtonEvent(pressed=True, type=ButtonType.cancel))

@@ -19,24 +19,28 @@ class CarState(CarStateBase):
   _ASSIST_MODE_ACC = 1
   _ASSIST_MODE_TJA = 2
 
-  # Practical route-backed lateral decoder on the i3 is phase-local:
+  # Minimal route-backed lateral view of frame 96:
   #   selector  -> 96.byte0
-  #   payload   -> 96.byte1
-  #   support   -> 96.byte2
-  # Values are medians from route 00000402 TJA-only labeling.
-  _LAT_B1_PHASE_MAP = {
-    57: {"direction": "R_high", "left": 63.0, "center": 174.5, "right": 236.0, "confidence": "high"},
-    35: {"direction": "R_high", "left": 99.0, "center": 174.5, "right": 236.0, "confidence": "high"},
-    49: {"direction": "R_high", "left": 81.0, "center": 175.0, "right": 217.0, "confidence": "high"},
-    58: {"direction": "R_low",  "left": 196.5, "center": 174.5, "right": 62.0,  "confidence": "high"},
-    46: {"direction": "R_high", "left": 99.0, "center": 157.0, "right": 216.0, "confidence": "high"},
-    25: {"direction": "R_low",  "left": 176.5, "center": 110.0, "right": 62.0,  "confidence": "high"},
-    8:  {"direction": "R_high", "left": 99.0, "center": 116.0, "right": 217.0, "confidence": "medium"},
-    5:  {"direction": "R_high", "left": 99.0, "center": 116.0, "right": 216.0, "confidence": "medium"},
-    60: {"direction": "R_high", "left": 63.0, "center": 133.0, "right": 149.5, "confidence": "medium"},
-    51: {"direction": "R_high", "left": 137.5, "center": 176.0, "right": 217.0, "confidence": "low"},
-    27: {"direction": "R_high", "left": 99.0, "center": 133.0, "right": 176.0, "confidence": "low"},
-    53: {"direction": "R_high", "left": 62.5, "center": 216.0, "right": 236.5, "confidence": "low"},
+  #   payload   -> low nibble of 96.byte2
+  #   context   -> 96.byte3
+  # Direction/magnitude remain phase-local but no longer depend on byte1.
+  _LAT_B2_PHASE_MAP = {
+    0x00: {"mode": "delta",  "gain": 0.2924724805838325, "center": 252.0, "confidence": "medium"},
+    0x04: {"mode": "future", "gain": 2.5092792257102507, "center": 247.0, "confidence": "high"},
+    0x08: {"mode": "delta",  "gain": -0.61435546875, "center": 249.0, "confidence": "medium"},
+    0x0C: {"mode": "future", "gain": 2.478782854867928, "center": 248.5, "confidence": "medium"},
+    0x10: {"mode": "future", "gain": 1.327924057710358, "center": 248.0, "confidence": "medium"},
+    0x14: {"mode": "delta",  "gain": -0.8819670052290186, "center": 245.0, "confidence": "low"},
+    0x18: {"mode": "future", "gain": 2.1200545980105185, "center": 250.0, "confidence": "high"},
+    0x1C: {"mode": "future", "gain": 2.3656642313093204, "center": 244.0, "confidence": "high"},
+    0x20: {"mode": "future", "gain": 1.66518026660722, "center": 246.0, "confidence": "medium"},
+    0x24: {"mode": "future", "gain": 0.8935605457190904, "center": 252.0, "confidence": "medium"},
+    0x28: {"mode": "future", "gain": 3.6022312608489697, "center": 248.0, "confidence": "medium"},
+    0x2C: {"mode": "future", "gain": 0.9222890638394596, "center": 247.5, "confidence": "low"},
+    0x30: {"mode": "delta",  "gain": -0.9152262882258118, "center": 249.5, "confidence": "medium"},
+    0x34: {"mode": "future", "gain": 1.654658586103641, "center": 249.0, "confidence": "high"},
+    0x38: {"mode": "future", "gain": 3.1955820742568717, "center": 242.5, "confidence": "high"},
+    0x3C: {"mode": "future", "gain": 2.4277548422827278, "center": 251.0, "confidence": "high"},
   }
 
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
@@ -49,6 +53,9 @@ class CarState(CarStateBase):
     self.stock_tja_active = False
     self.stock_acc_base_armed = False
     self.stock_assist_advanced = False
+    self.stock_tja_active_cnt = 0
+    self.stock_long_target_u_83 = 0
+    self.stock_long_target_speed_est_kph_83 = 0.0
     self.eps_angle_51_raw = 0
     self.stock_stalk_main_a = 0
     self.stock_stalk_main_b = 0
@@ -66,16 +73,6 @@ class CarState(CarStateBase):
     self.drive_state_kind_hist = deque(maxlen=3)
     self.drive_state_gear_est = GearShifter.unknown
     self.main_cruise_button = 0
-    self.long_59_phase = 0
-    self.long_59_wb = 0
-    self.long_59_wc = 0
-    self.long_59_b3 = 0
-    self.long_59_b5 = 0
-    self.long_54_phase = 0
-    self.long_54_wb = 0
-    self.long_54_wc = 0
-    self.long_54_b4 = 0
-    self.long_54_b6 = 0
     self.long_up_217_raw16 = 0
     self.long_up_217_word23 = 0
     self.long_up_217_value = 0
@@ -108,15 +105,15 @@ class CarState(CarStateBase):
     self.long_helper_93_wb = 0
     self.long_helper_93_wc = 0
     self.long_helper_93_wd = 0
-    self.long_54_stock_template = bytes([0xFF] * 17)
-    self.long_59_stock_template = bytes([0xFF] * 17)
     self.driver_steer_torque = 0.0
     self.driver_steer_pressed = False
     self.vehicle_speed_kph = 0.0
     self.stock_lat60_phase = 0
     self.stock_lat60_cmd_phase = 0
     self.stock_lat60_subframe = 0
+    self.stock_lat72_cycle_count = 0
     self.stock_lat96_phase = 0
+    self.stock_lat96_cycle_count = 0
     self.stock_lat96_b1 = 0
     self.stock_lat96_b2 = 0
     self.stock_lat96_b3 = 0
@@ -134,81 +131,44 @@ class CarState(CarStateBase):
     self.ptcan_steering_companion_raw = 0
 
   @staticmethod
-  def _stock_lat_dir_from_phase_b1(phase: int, b1: int) -> tuple[str, str]:
-    row = CarState._LAT_B1_PHASE_MAP.get(int(phase))
+  def _stock_lat_dir_from_phase_b2(phase: int, b2: int) -> tuple[str, str]:
+    row = CarState._LAT_B2_PHASE_MAP.get(int(phase))
     if row is None:
       return ("unknown", "none")
-
-    left = float(row["left"])
     center = float(row["center"])
-    right = float(row["right"])
-    thr_lc = (left + center) / 2.0
-    thr_cr = (center + right) / 2.0
-    b1f = float(b1)
-
-    if row["direction"] == "R_high":
-      if b1f <= thr_lc:
-        return ("left", str(row["confidence"]))
-      if b1f >= thr_cr:
-        return ("right", str(row["confidence"]))
+    b2f = float(b2)
+    if abs(b2f - center) < 0.75:
       return ("center", str(row["confidence"]))
-
-    if b1f >= thr_lc:
-      return ("left", str(row["confidence"]))
-    if b1f <= thr_cr:
-      return ("right", str(row["confidence"]))
-    return ("center", str(row["confidence"]))
+    left_is_high = float(row["gain"]) > 0.0
+    if b2f > center:
+      return (("left" if left_is_high else "right"), str(row["confidence"]))
+    return (("right" if left_is_high else "left"), str(row["confidence"]))
 
   @staticmethod
-  def _stock_lat_mag_from_phase_b1(phase: int, b1: int) -> tuple[float, str]:
-    row = CarState._LAT_B1_PHASE_MAP.get(int(phase))
+  def _stock_lat_mag_from_phase_b2(phase: int, b2: int) -> tuple[float, str]:
+    row = CarState._LAT_B2_PHASE_MAP.get(int(phase))
     if row is None:
       return (0.0, "none")
-
-    left = float(row["left"])
     center = float(row["center"])
-    right = float(row["right"])
-    span = max(abs(left - center), abs(right - center))
+    span = 7.0
     if span <= 1e-6:
       return (0.0, "none")
-    return (min(1.0, abs(float(b1) - center) / span), str(row["confidence"]))
+    return (min(1.0, abs(float(b2) - center) / span), str(row["confidence"]))
 
   @staticmethod
   def _stock_lat_support_from_b2(phase: int, b2: int) -> tuple[float, str]:
-    row = CarState._lat_phase_entry(int(phase))
+    row = CarState._LAT_B2_PHASE_MAP.get(int(phase))
     if row is None:
       return (0.0, "none")
-    if not all(k in row for k in ("L_b2", "C_b2", "R_b2")):
-      return (0.0, "none")
-    left = float(row["L_b2"])
-    center = float(row["C_b2"])
-    right = float(row["R_b2"])
-    span = max(abs(left - center), abs(right - center))
+    center = float(row["center"])
+    span = 7.0
     if span <= 1e-6:
       return (0.0, "none")
     return (min(1.0, abs(float(b2) - center) / span), "low")
 
   @staticmethod
   def _lat_phase_entry(phase: int) -> dict | None:
-    row = CarState._LAT_B1_PHASE_MAP.get(int(phase))
-    if row is None:
-      return None
-    # Attach byte2 support medians locally without inventing DBC fields.
-    support = {
-      57: {"L_b2": 252.0, "C_b2": 252.5, "R_b2": 251.0},
-      35: {"L_b2": 246.0, "C_b2": 242.0, "R_b2": 247.0},
-      49: {"L_b2": 250.0, "C_b2": 253.5, "R_b2": 251.0},
-      58: {"L_b2": 251.0, "C_b2": 250.0, "R_b2": 253.0},
-      46: {"L_b2": 252.0, "C_b2": 241.0, "R_b2": 252.5},
-      25: {"L_b2": 249.5, "C_b2": 248.0, "R_b2": 253.0},
-      8: {"L_b2": 250.0, "C_b2": 248.5, "R_b2": 251.0},
-      5: {"L_b2": 249.0, "C_b2": 248.0, "R_b2": 245.0},
-      60: {"L_b2": 246.0, "C_b2": 241.0, "R_b2": 252.0},
-      51: {"L_b2": 250.0, "C_b2": 252.0, "R_b2": 251.0},
-      27: {"L_b2": 251.0, "C_b2": 242.0, "R_b2": 250.0},
-      53: {"L_b2": 248.5, "C_b2": 248.0, "R_b2": 248.0},
-    }
-    return {**row, **support.get(int(phase), {})}
+    return CarState._LAT_B2_PHASE_MAP.get(int(phase))
 
   @staticmethod
   def _stock_long_upstream_hint(acc217_raw16: int, brake796_b1: int) -> tuple[str, str]:
@@ -260,18 +220,6 @@ class CarState(CarStateBase):
     if gate == 640 and state == 24802:
       return cls._ASSIST_MODE_TJA
     return None
-
-  @staticmethod
-  def _update_long_template(base: bytes, phase: int, preserved: dict[int, int], command: dict[int, int]) -> bytes:
-    payload = bytearray(base if len(base) == 17 else bytes([0xFF] * 17))
-    payload[0] = phase & 0xFF
-    for idx, val in preserved.items():
-      if 0 <= idx < len(payload):
-        payload[idx] = val & 0xFF
-    for idx, val in command.items():
-      if 0 <= idx < len(payload):
-        payload[idx] = val & 0xFF
-    return bytes(payload)
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp_state = can_parsers[Bus.pt]   # src0 / SAS-side
@@ -340,37 +288,6 @@ class CarState(CarStateBase):
     # No physical brake-pressure value is closed yet.
     ret.brake = 0.0
 
-    # Best current stock longitudinal helper branches:
-    #   59 -> powertrain-intent proxy
-    #   54 -> brake-blend / regen-support proxy
-    long_59 = cp_aux.vl.get("LONG_TX_POWERTRAIN_CANDIDATE", {})
-    self.long_59_phase = int(long_59.get("LONG_TX_POWERTRAIN_PHASE_BYTE_0", 0))
-    self.long_59_wb = int(long_59.get("LONG_TX_POWERTRAIN_WORD_B", 0))
-    self.long_59_wc = int(long_59.get("LONG_TX_POWERTRAIN_WORD_C", 0))
-    self.long_59_b3 = int(long_59.get("LONG_TX_POWERTRAIN_BYTE_3", 0))
-    self.long_59_b5 = int(long_59.get("LONG_TX_POWERTRAIN_BYTE_5", 0))
-
-    long_54 = cp_aux.vl.get("LONG_TX_BRAKE_BLEND_CANDIDATE", {})
-    self.long_54_phase = int(long_54.get("LONG_TX_BRAKE_BLEND_PHASE_BYTE_0", 0))
-    self.long_54_wb = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_B", 0))
-    self.long_54_wc = int(long_54.get("LONG_TX_BRAKE_BLEND_WORD_C", 0))
-    self.long_54_b4 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_4", 0))
-    self.long_54_b6 = int(long_54.get("LONG_TX_BRAKE_BLEND_BYTE_6", 0))
-
-    # Dynm-like mimic path: keep a rolling stock template and only patch the
-    # minimal command bytes later in CarController. For 54 the preserved local
-    # bytes are 4/6, while for 59 the preserved local bytes are 3/5.
-    self.long_54_stock_template = self._update_long_template(
-      self.long_54_stock_template, self.long_54_phase,
-      preserved={4: self.long_54_b4, 6: self.long_54_b6},
-      command={3: self.long_54_wb & 0xFF, 5: self.long_54_wc & 0xFF},
-    )
-    self.long_59_stock_template = self._update_long_template(
-      self.long_59_stock_template, self.long_59_phase,
-      preserved={3: self.long_59_b3, 5: self.long_59_b5},
-      command={4: (self.long_59_wb >> 8) & 0xFF, 6: (self.long_59_wc >> 8) & 0xFF},
-    )
-
     if use_ptcan:
       pt_accel = cp_can.vl.get("PTCAN_ACCELERATOR_CANDIDATE", {})
       self.long_up_217_raw16 = int(pt_accel.get("ACCEL_RAW_PT_CAN", 0))
@@ -414,8 +331,16 @@ class CarState(CarStateBase):
     self.stock_lat60_cmd_phase = int(lat60.get("LAT_STOCK_TRIGGER_CMD_PHASE", 0))
     self.stock_lat60_subframe = int(lat60.get("LAT_STOCK_TRIGGER_SUBFRAME_LSB", 0))
 
+    lat72 = cp_state.vl.get("LAT_STOCK_FRAME_72_CANDIDATE", {})
+    self.stock_lat72_cycle_count = int(lat72.get("LAT_STOCK_72_CYCLE_COUNT", 0))
+
+    lat131 = cp_state.vl.get("LAT_TJA_COMMAND_CANDIDATE", {})
+    self.stock_long_target_u_83 = int(lat131.get("LONG_TARGET_U_83", 0))
+    self.stock_long_target_speed_est_kph_83 = float(lat131.get("LONG_TARGET_SPEED_EST_83", 0.0))
+
     lat96 = cp_state.vl.get("LAT_STOCK_TX_PAYLOAD_CANDIDATE", {})
-    self.stock_lat96_phase = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0))
+    self.stock_lat96_cycle_count = int(lat96.get("LAT_STOCK_TX_CYCLE_COUNT", lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_0", 0)))
+    self.stock_lat96_phase = self.stock_lat96_cycle_count
     self.stock_lat96_b1 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_1", 0))
     self.stock_lat96_b2 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_2", 0))
     self.stock_lat96_b3 = int(lat96.get("LAT_STOCK_TX_PAYLOAD_BYTE_3", 0))
@@ -440,8 +365,8 @@ class CarState(CarStateBase):
     self.stock_lat_active_hint = (self.stock_lat112_b5 & 0x20) == 0
 
     phase_for_decode = self.stock_lat96_phase
-    self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b1(phase_for_decode, self.stock_lat96_b1)
-    self.stock_lat_mag_hint, self.stock_lat_mag_confidence = self._stock_lat_mag_from_phase_b1(phase_for_decode, self.stock_lat96_b1)
+    self.stock_lat_dir_hint, self.stock_lat_dir_confidence = self._stock_lat_dir_from_phase_b2(phase_for_decode, self.stock_lat96_b2)
+    self.stock_lat_mag_hint, self.stock_lat_mag_confidence = self._stock_lat_mag_from_phase_b2(phase_for_decode, self.stock_lat96_b2)
     if not self.stock_lat_active_hint:
       self.stock_lat_dir_hint = "unknown"
       self.stock_lat_dir_confidence = "none"
@@ -493,14 +418,16 @@ class CarState(CarStateBase):
     self.stock_acc_ctrl_gate = stock_ctrl_gate
     self.stock_acc_base_armed = stock_ctrl_state == 16610
     self.stock_assist_advanced = stock_ctrl_state == 24802
-    # Modern routes show the real stock command on frame 96. Treat 96 byte3 as
-    # the family marker and require the 112 active hint before calling it managed.
-    stock_tja_modern = (
-      self.stock_lat_active_hint and
-      self.stock_lat96_b3 in (0x21, 0xE0) and
-      stock_ctrl_state not in (0, 35041)
-    )
-    self.stock_tja_active = self.stock_assist_advanced or stock_tja_modern
+    # Keep TJA detection external to the DBC and conservative:
+    # only accept the explicit managed/helper branch observed in route-backed
+    # reverse work. Frame-96 heuristics are too permissive because the same
+    # family remains alive outside true TJA-managed windows.
+    stock_tja_candidate = stock_ctrl_state == 24802 and stock_ctrl_gate in (640, 656)
+    if stock_tja_candidate:
+      self.stock_tja_active_cnt = min(self.stock_tja_active_cnt + 1, 4)
+    else:
+      self.stock_tja_active_cnt = max(self.stock_tja_active_cnt - 1, 0)
+    self.stock_tja_active = self.stock_tja_active_cnt >= 2
     self.stock_stalk_main_a = stock_stalk_main_a
     self.stock_stalk_main_b = stock_stalk_main_b
     # Legacy route correlation:
@@ -632,7 +559,9 @@ class CarState(CarStateBase):
   def get_can_parsers(CP, CP_SP):
     dbc = DBC[CP.carFingerprint][Bus.pt]
     pt_messages = [
+      ("LAT_TJA_COMMAND_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_TRIGGER_CANDIDATE", float("nan")),
+      ("LAT_STOCK_FRAME_72_CANDIDATE", float("nan")),
       ("LAT_STOCK_TX_PAYLOAD_CANDIDATE", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_D", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_E", float("nan")),
@@ -643,8 +572,6 @@ class CarState(CarStateBase):
       ("EPS_ANGLE", float("nan")),
       ("DYNAMICS_YAW_PROV", float("nan")),
       ("LONG_STATE_HELPER_D", float("nan")),
-      ("PEDAL_OR_HOLD_STATE_CANDIDATE", float("nan")),
-      ("BRAKE_BLEND_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE", float("nan")),

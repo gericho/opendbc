@@ -52,9 +52,9 @@ BO_ 51 EPS_ANGLE: 17 BMW_I3
  SG_ EPS_ANGLE_RAW_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ EPS_ANGLE_RAW_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ EPS_ANGLE_RAW_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ EPS_STEERING_ANGLE_BMW : 24|16@1+ (0.0439453125,-1440) [-1440|1440] "deg" BMW_I3
- CM_ BO_ 51 "BMW SP2018-style EPS angle frame aligned to dynm reference work. The m0/cycle-0 subframe carries the steering angle on bytes 3:4 using angle_deg = raw * 0.0439453125 - 1440.0.";
- CM_ SG_ 51 EPS_STEERING_ANGLE_BMW "Primary FlexRay EPS steering-angle candidate aligned to dynm BMW SP2018 reference: steering_angle m0 : 24|16@1+ (0.0439453125,-1440).";
+ SG_ EPS_STEERING_ANGLE_BMW : 24|16@1+ (0.042420980556,-1390.727380850223) [-465|465] "deg" BMW_I3
+ CM_ BO_ 51 "FlexRay EPS angle frame. Raw steering angle lives in word B as bytes 3:4 little-endian and only the active subframes where byte0&0x3 is 0 or 2 carry angle content. Subframes 1 and 3 are structurally empty.";
+CM_ SG_ 51 EPS_STEERING_ANGLE_BMW "Primary FlexRay EPS steering-angle candidate from raw word B at 24|16@1+ interpreted little-endian. Global refit against the legacy CAN steering angle on 0x302 across routes 0x401 and 0x402: angle_deg ~= raw_B * 0.042420980556 - 1390.727380850223. Apply only on active cycles 0/2; cycles 1/3 should be treated as empty subframes.";
 
 BO_ 55 VEHICLE_SPEED_PROV: 17 BMW_I3
  SG_ VEHICLE_SPEED_CYCLE_RAW M : 0|2@1+ (1,0) [0|3] "" BMW_I3
@@ -95,48 +95,9 @@ BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
  SG_ BRAKE_REGEN_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ EPS_ANGLE_PROXY_44_RAW : 105|12@1- (1,0) [-2048|2047] "" BMW_I3
  SG_ EPS_ANGLE_PROXY_44_DEG : 105|12@1- (0.0835794,3.3976) [-720|720] "deg" BMW_I3
- CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental secondary longitudinal candidate. Across historical TJA routes 00000054/55 and modern ACC-only route 000000b3, this frame separates dynamic phases weakly but remains far less informative than 54 and 59 for manual pedal vs managed-following behavior.";
+ CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental secondary longitudinal candidate. It separates some dynamic phases weakly, but remains too indirect to use as a stock command source.";
 CM_ SG_ 44 EPS_ANGLE_PROXY_44_RAW "Legacy experimental steering-angle proxy from earlier route fitting. Keep for debug only. Recent whole-route checks show it often stays nearly flat and it is no longer used for steeringAngleDeg.";
 CM_ SG_ 44 EPS_ANGLE_PROXY_44_DEG "Legacy debug-only steering-angle estimate derived from EPS_ANGLE_PROXY_44_RAW. No production steeringAngleDeg use.";
-
-BO_ 54 BRAKE_BLEND_CANDIDATE_B: 17 BMW_I3
- SG_ LONG_TX_BRAKE_BLEND_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ BRAKE_BLEND_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ BRAKE_BLEND_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ BRAKE_BLEND_STATE_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_TX_BRAKE_BLEND_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_TX_BRAKE_BLEND_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ BRAKE_BLEND_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ BRAKE_BLEND_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ BRAKE_BLEND_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ BRAKE_BLEND_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LONG_TX_BRAKE_BLEND_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LONG_TX_BRAKE_BLEND_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ SG_ 54 BRAKE_BLEND_STATE_A "Primary brake-blend / regen-support candidate. Across 00000054, 00000055, modern ACC-only route 000000b3, and recent ACC-only route 00000147, this frame cleanly separates manual accelerator application, ACC armed/base, and managed/following phases. STATE_B and STATE_C rise strongly in managed-following and automatic decel windows. In 00000147, frame 54 becomes active in complementary subframes while 59 carries the powertrain-intent side, reinforcing that 54 is the best current stock longitudinal support frame for brake-blend / regen behavior rather than a standalone brake command.";
-CM_ SG_ 54 LONG_TX_BRAKE_BLEND_PHASE_BYTE_0 "Best current transport/phase byte for frame 54. Managed windows show a strong byte-level cycle with a counter-like low nibble, indicating housekeeping/phase structure rather than direct command magnitude.";
-CM_ SG_ 54 LONG_TX_BRAKE_BLEND_WORD_B "Best current negative-branch TX candidate. In managed ACC windows it is the dominant non-idle content when desired longitudinal behavior is decel / regen / brake-blend. Current conservative replay interpretation: use this family on the negative branch, primarily on odd/every-other managed subcycles, centered near 65025.";
-CM_ SG_ 54 LONG_TX_BRAKE_BLEND_WORD_C "Companion word to LONG_TX_BRAKE_BLEND_WORD_B. Best current negative-branch TX candidate alongside frame 54 word B. Current conservative replay interpretation: use this family on the negative branch, primarily on odd/every-other managed subcycles, centered near 7.";
-CM_ SG_ 54 LONG_TX_BRAKE_BLEND_BYTE_4 "Low byte of the current best frame-54 negative-branch TX word. Useful for byte-local replay fitting and checksum/counter separation work.";
-CM_ SG_ 54 LONG_TX_BRAKE_BLEND_BYTE_6 "Low byte of the current best frame-54 companion TX word. Useful for byte-local replay fitting and checksum/counter separation work.";
-
-BO_ 59 PEDAL_OR_HOLD_STATE_CANDIDATE: 17 BMW_I3
- SG_ LONG_TX_POWERTRAIN_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ PEDAL_HOLD_STATE_RAW : 16|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ PEDAL_HOLD_STATE_AUX : 32|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ PEDAL_HOLD_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ PEDAL_HOLD_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ PEDAL_HOLD_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ PEDAL_HOLD_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LONG_TX_POWERTRAIN_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_TX_POWERTRAIN_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ LONG_TX_POWERTRAIN_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LONG_TX_POWERTRAIN_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ SG_ 59 PEDAL_HOLD_STATE_RAW "Strongest stock longitudinal content candidate so far. Across 00000054, 00000055, 000000b3, and recent ACC-only route 00000147, RAW is high during clear manual accelerator application, lower in ACC armed/base, and lowest during managed/following windows. AUX also shifts strongly between manual and managed phases. In 00000147 managed ACC, 59 remains the dominant powertrain-intent family while 54 appears in complementary brake-blend subframes. This remains the best current candidate for stock pedal/hold/coast-state inference under ACC, not a closed accel command.";
-CM_ SG_ 59 LONG_TX_POWERTRAIN_PHASE_BYTE_0 "Best current transport/phase byte for frame 59. Managed windows show a strong byte-level cycle with a counter-like low nibble, indicating housekeeping/phase structure rather than direct command magnitude.";
-CM_ SG_ 59 LONG_TX_POWERTRAIN_WORD_B "Best current positive/coast TX candidate. In managed ACC windows it is the dominant non-idle content when desired longitudinal behavior is propulsion / hold / coast rather than brake-blend. Current conservative replay interpretation: use this family on the positive-or-coast branch, primarily on even/every-other managed subcycles, centered near 32777.";
-CM_ SG_ 59 LONG_TX_POWERTRAIN_WORD_C "Companion word to LONG_TX_POWERTRAIN_WORD_B. Best current positive/coast TX candidate alongside frame 59 word B. Current conservative replay interpretation: use this family on the positive-or-coast branch, primarily on even/every-other managed subcycles, centered near 32767.";
-CM_ SG_ 59 LONG_TX_POWERTRAIN_BYTE_3 "Low byte of the current best frame-59 positive/coast TX word. Useful for byte-local replay fitting and checksum/counter separation work.";
-CM_ SG_ 59 LONG_TX_POWERTRAIN_BYTE_5 "Low byte of the current best frame-59 companion TX word. Useful for byte-local replay fitting and checksum/counter separation work.";
 
 BO_ 60 LAT_STOCK_TX_TRIGGER_CANDIDATE: 17 BMW_I3
  SG_ LAT_STOCK_TRIGGER_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -147,17 +108,65 @@ CM_ SG_ 60 LAT_STOCK_TRIGGER_PHASE_BYTE_0 "Raw scheduler byte for the SAS-side l
 CM_ SG_ 60 LAT_STOCK_TRIGGER_SUBFRAME_LSB "Low two bits of frame-60 byte0. Useful when reconstructing the four-subframe burst order observed in the SAS 20 ms lateral scheduler.";
 CM_ SG_ 60 LAT_STOCK_TRIGGER_CMD_PHASE "Derived command-phase view of frame-60 byte0 (byte0 >> 1). Keep as a coarse scheduler helper while the real command stays phase-local on frame 96.";
 
+BO_ 72 LAT_STOCK_FRAME_72_CANDIDATE: 17 BMW_I3
+ SG_ LAT_STOCK_72_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_CYCLE_COUNT : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_CRC1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_CNT1 : 20|4@1+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_72_ALWAYS_0X9 : 16|4@1+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_STEERING_ANGLE_REQ : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_STEER_TORQUE_REQ : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_7 : 56|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_TJA_READY : 56|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_ASSIST_MODE : 64|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_9 : 72|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_WAYBACK_EN1_LANE_KEEPING_TRIGGER : 72|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_10 : 80|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_LANE_KEEPING_TRIGGERED : 80|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_11 : 88|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_LIKE_ASSIST_TORQUE_RESERVE : 88|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_12 : 96|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_13 : 104|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_14 : 112|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_CONSTANTS : 96|26@1+ (1,0) [0|262143] "" BMW_I3
+ SG_ LAT_STOCK_72_WAYBACK_EN_2 : 114|2@1+ (1,0) [0|3] "" BMW_I3
+ SG_ LAT_STOCK_72_STEERING_ENGAGED : 116|4@1+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_15 : 120|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_72_BYTE_16 : 128|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 72 "Raw stock frame-72 candidate, reintroduced for parameter-by-parameter comparison against the SP2018 72-byte layout. Current fixed synthetic blocks: cycle_count = 0x00, crc1 = 0x00 with real final CRC to be computed later outside the DBC, cnt1 = 0x00, always_0x9 placeholder = 0xF, steering_angle_req placeholder = 0x0000, steer_torque_req placeholder = 0xFFFF, TJA_ready placeholder = 0xFF, assist_mode placeholder = 0xE0, wayback_en1_lane_keeping_trigger placeholder = 0xFF, lane_keeping_triggered placeholder = 0xFF, like_assist_torque_reserve placeholder = 0xFF, constants placeholder = 0x3FFFF, wayback_en_2 placeholder = 0x3, steering_engaged placeholder = 0xF. For blocks 3-14, firmware currently preserves the live OEM payload bytes from the cached 72 template.";
+CM_ SG_ 72 LAT_STOCK_72_CYCLE_COUNT "Block 1 candidate on local frame 72. Current synthetic decision: use a fixed value of 0x00 when building a local 72 frame, matching the simpler dynm-style approach instead of waiting on OEM live timing.";
+CM_ SG_ 72 LAT_STOCK_72_CRC1 "Block 2 candidate on local frame 72. Current synthetic decision: keep this DBC-visible crc1 field at 0x00 and compute any real final CRC later outside the DBC, dynm-style.";
+CM_ SG_ 72 LAT_STOCK_72_CNT1 "Block 3 candidate on local frame 72 in the same positional slot as SP2018 cnt1. Current synthetic decision: fix it to 0x00, matching SMNOGAR/dynm builder behavior.";
+CM_ SG_ 72 LAT_STOCK_72_ALWAYS_0X9 "Block 4 candidate on local frame 72 in the same positional slot as SP2018 always_0x9. Placeholder decision in DBC/controller: set to 0xF if synthesized locally. Firmware currently preserves the live OEM high nibble of byte2 from the cached 72 template, so the placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_STEERING_ANGLE_REQ "Block 5 candidate in the same positional slot as SP2018 steering_angle_req. Placeholder decision in DBC/controller: set to 0x0000 if synthesized locally. Firmware currently preserves the live OEM bytes 3:4 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_STEER_TORQUE_REQ "Block 6 candidate in the same positional slot as SP2018 steer_torque_req. Placeholder decision in DBC/controller: set to 0xFFFF if synthesized locally. Firmware currently preserves the live OEM bytes 5:6 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_TJA_READY "Block 7 candidate in the same positional slot as SP2018 TJA_ready. Placeholder decision in DBC/controller: set to 0xFF if synthesized locally. Firmware currently preserves the live OEM byte7 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_ASSIST_MODE "Block 8 candidate in the same positional slot as SP2018 assist_mode. Placeholder decision in DBC/controller: set to 0xE0 if synthesized locally. Firmware currently preserves the live OEM byte8 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_WAYBACK_EN1_LANE_KEEPING_TRIGGER "Block 9 candidate in the same positional slot as SP2018 wayback_en1_lane_keeping_trigger. Placeholder decision in DBC/controller: set to 0xFF if synthesized locally. Firmware currently preserves the live OEM byte9 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_LANE_KEEPING_TRIGGERED "Block 10 candidate in the same positional slot as SP2018 lane_keeping_triggered. Placeholder decision in DBC/controller: set to 0xFF if synthesized locally. Firmware currently preserves the live OEM byte10 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_LIKE_ASSIST_TORQUE_RESERVE "Block 11 candidate in the same positional slot as SP2018 like_assist_torque_reserve. Placeholder decision in DBC/controller: set to 0xFF if synthesized locally. Firmware currently preserves the live OEM byte11 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_CONSTANTS "Block 12 candidate in the same positional slot as SP2018 constants. Placeholder decision in DBC/controller: set to 0x3FFFF if synthesized locally. Firmware currently preserves the live OEM bytes 12:14 (including the low 2 bits of byte14) from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_WAYBACK_EN_2 "Block 13 candidate in the same positional slot as SP2018 wayback_en_2. Placeholder decision in DBC/controller: set to 0x3 if synthesized locally. Firmware already preserves the live OEM byte14 from the cached 72 template, so this placeholder is not the final bus value.";
+CM_ SG_ 72 LAT_STOCK_72_STEERING_ENGAGED "Block 14 candidate in the same positional slot as SP2018 steering_engaged. Placeholder decision in DBC/controller: set to 0xF if synthesized locally. Firmware already preserves the live OEM byte14 from the cached 72 template, so this placeholder is not the final bus value.";
+
 BO_ 43 CHASSIS_STATE_CANDIDATE: 17 BMW_I3
  SG_ CHASSIS_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ CHASSIS_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ SG_ 43 CHASSIS_STATE_A "Experimental secondary dynamic-state frame. It follows longitudinal phase changes across 00000054/55/b3, but is still weaker than 59 and 54 for isolating stock ACC content.";
+ CM_ SG_ 43 CHASSIS_STATE_A "Experimental secondary dynamic-state frame. It follows some longitudinal phase changes, but remains too weak and indirect for stock command use.";
 
 BO_ 63 LONG_STATE_HELPER_D: 17 BMW_I3
  SG_ LONG_STATE_HELPER_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ LONG_STATE_HELPER_D_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ LONG_STATE_HELPER_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ LONG_STATE_HELPER_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 63 "Raw helper added after route 000003d0 showed src1/63 as one of the strongest discriminants for stock longitudinal frame families 54/59. Keep read-only for state-machine closure; do not treat as a direct accel command.";
+ CM_ BO_ 63 "Raw helper frame for longitudinal state closure. Keep read-only; do not treat as a direct accel command.";
 
 BO_ 93 ACC_TJA_OLD_ROUTE_HELPER_A: 17 BMW_I3
  SG_ ACC_TJA_OLD_A_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -171,21 +180,6 @@ BO_ 93 ACC_TJA_OLD_ROUTE_HELPER_A: 17 BMW_I3
  SG_ ACC_TJA_OLD_A_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_STATE_MAIN_A : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ BO_ 93 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. This src23 frame repeatedly changed around ACC/TJA/stalk command windows and is kept as a raw helper only for old-route correlation.";
-
-BO_ 96 LAT_STOCK_TX_PAYLOAD_CANDIDATE: 9 BMW_I3
- SG_ LAT_STOCK_TX_PAYLOAD_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_TX_PAYLOAD_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_TX_PAYLOAD_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_TX_PAYLOAD_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_TX_PAYLOAD_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_TX_PAYLOAD_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 96 "Primary stock lateral TX payload candidate and current active draft-TX target. Routes 00000401 and 00000006 confirmed that src0/96 changes coherently during real managed-steering windows. The practical decoder remains phase-local and family-specific rather than a single global scale in degrees. Current runtime draft TX copies the live 96 family and only nudges the command bytes phase-locally.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_0 "Phase/family byte inside the current best lateral TX payload frame. Use as the primary phase-local selector for frame 96.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_1 "Best current direction-discriminating byte in the stock lateral TX payload. Decode phase-locally with frame 96 byte0; do not treat byte1 as a global signed angle scale because the numeric direction flips across phase families.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_2 "Auxiliary payload byte that moves with steering activity but is not yet isolated as a standalone signed magnitude. Relative to dynm/smnogar BMW SP2018 references, byte2 is the best current i3 candidate for a torque/intensity-like companion to byte1, but it is weaker than byte1 and should not be used as the primary direction discriminator.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_3 "Payload-support byte that remains structurally stable across many managed windows. Useful for identifying fixed-vs-dynamic portions of frame 96.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_4 "Payload-support byte that remains structurally stable across many managed windows. Useful for identifying fixed-vs-dynamic portions of frame 96.";
-CM_ SG_ 96 LAT_STOCK_TX_PAYLOAD_BYTE_8 "Tail byte in the current best lateral TX payload frame. Keep as raw structural content until checksum/counter separation is proven.";
 
 BO_ 97 ACC_TJA_OLD_ROUTE_HELPER_B: 17 BMW_I3
  SG_ ACC_TJA_OLD_B_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -248,8 +242,10 @@ BO_ 116 ACC_STALK_TJA_CANDIDATE_C: 17 BMW_I3
  SG_ LAT_STOCK_SUPPORT_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_SUPPORT_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_SUPPORT_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_DASH_MANAGED_CONFIRM_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 116 "Secondary lateral RX/state helper. Confirmed on historical routes 00000054 and 00000055, present on the modern interface in route 000000b3, and strengthened by managed-TJA route 00000176. Historical logs exposed it on src23; modern dual-FlexRay logging exposes the same frame on src1. It tracks the same assisted-steering phases as 112 and is the best current secondary helper for stock lateral command/echo analysis. Byte5 is not yet a standalone boolean, but it moves through stable phase families alongside 112 and is logged as support evidence for the live stock_lat_active_hint path.";
 CM_ SG_ 116 LAT_STOCK_SUPPORT_BYTE_5 "Secondary state-support byte for stock lateral activity. Not yet a standalone boolean, but it moves through stable phase families alongside frame 112 and is useful as corroborating evidence when validating assisted-steering windows.";
+CM_ SG_ 116 LAT_STOCK_DASH_MANAGED_CONFIRM_BYTE_5 "Debug-only dashboard-managed confirmation helper. On route 00000402--59a94efa08--0, the visible TJA cluster-light activation occurs after the internal managed state and aligns best with a later phase change on frame 116 byte5, including a 0xFF branch around 26.58 s. Use this signal only to search for the driver-visible managed-confirmation point across routes; do not treat it as the internal TJA-active gate.";
 
 BO_ 124 ACC_STALK_TJA_CANDIDATE_D: 17 BMW_I3
  SG_ ACC_STALK_TJA_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -258,15 +254,37 @@ BO_ 124 ACC_STALK_TJA_CANDIDATE_D: 17 BMW_I3
  SG_ ACC_STALK_TJA_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  CM_ BO_ 124 "Experimental ACC/TJA candidate from TJA and parked command-isolation routes. Strongly correlated with SET, RES, ACC, TJA, speed-stalk increment/decrement, distance-button, and ACC off. This frame is a priority candidate for future bit-level extraction of ACC/TJA state.";
 
-BO_ 131 ACC_TJA_OLD_ROUTE_HELPER_D: 17 BMW_I3
- SG_ ACC_TJA_OLD_D_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ ACC_TJA_OLD_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ ACC_TJA_OLD_D_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ ACC_TJA_OLD_D_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ ACC_TJA_OLD_D_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ ACC_TJA_OLD_CTRL_GATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ ACC_LONG_GATE_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 131 "Primary longitudinal state/gate helper. Legacy routes and the current three-way comparison set 000003ff (manual), 00000400 (ACC-only), and 00000402 (ACC+TJA) confirm that 131 separates manual-driving families from ACC/TJA session families, but does not by itself cleanly split ACC-only from TJA. Manual families still sit in the older ...9883/ba83/b98302ffff space, while both ACC-only and TJA move into the newer ...00000effff / ...7c-7f8002ffff family. Treat 131 as the coarse ACC/TJA family gate, not the final TJA discriminator.";
+BO_ 131 LAT_TJA_COMMAND_CANDIDATE: 17 BMW_I3
+ SG_ LAT_TJA_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_4 : 32|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LONG_TARGET_U_83 : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LONG_TARGET_SPEED_EST_83 : 24|16@1+ (0.047815,-1460.510) [0|300] "kph" BMW_I3
+ SG_ LAT_TJA_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_7 : 56|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_BYTE_8 : 64|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_GATE_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_GATE_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_GATE_VALID : 46|1@1+ (1,0) [0|1] "" BMW_I3
+ SG_ LAT_TJA_DIR_RULE_B1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_TJA_DIR_RULE_B3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 131 "Mixed stock ADAS state/command frame on src0. Current route-backed work no longer treats this as a pure lateral command. Bytes0/2/7/8 are live OEM structural bytes and should be copied through from the real bus template. Bytes5/6 should normally be sent from the host as the active gate 0x80/0x02. Within the managed longitudinal branch, byte3 behaves like an analog modular value, byte4 counts byte3 wrap events, and the combined word at bytes 3:4 little-endian gives the best current stock-compatible target-speed-like value u = byte3 + 256*byte4. Byte1 remains unresolved and byte2 remains cyclic OEM cadence.";
+CM_ SG_ 131 LAT_TJA_CYCLE "Live OEM cycle/phase byte. Do not synthesize a static value; copy it from the cached real-bus 0x83 template before injection.";
+CM_ SG_ 131 LAT_TJA_BYTE_2 "Live OEM cyclic byte. In active TJA it rolls 0xF0..0xFE with no observed exceptions on validated routes; copy it from the cached real-bus 0x83 template before injection.";
+CM_ SG_ 131 LAT_TJA_BYTE_3 "Current best analog stock longitudinal candidate. Treat this as the low byte of the internal target-speed-like value only when paired with LAT_TJA_BYTE_4.";
+CM_ SG_ 131 LAT_TJA_BYTE_4 "Slow wrap counter for LAT_TJA_BYTE_3. It increments on byte3 high-to-low wraps (255->0) and decrements on low-to-high wraps (0->255), giving u = byte3 + 256*byte4.";
+CM_ SG_ 131 LONG_TARGET_U_83 "Debug-only stock longitudinal target-like value reconstructed as bytes 3:4 little-endian, i.e. u = byte3 + 256*byte4.";
+CM_ SG_ 131 LONG_TARGET_SPEED_EST_83 "Debug-only speed estimate from LONG_TARGET_U_83 using the current best cross-route-compatible fit target_speed_kph ~= 0.047815 * u - 1460.510. Use for analysis only, not as a safety-critical actuation law.";
+CM_ SG_ 131 LAT_TJA_BYTE_7 "Live OEM structural byte. Do not synthesize a static value; copy it from the cached real-bus 0x83 template before injection.";
+CM_ SG_ 131 LAT_TJA_BYTE_8 "Live OEM structural byte. Do not synthesize a static value; copy it from the cached real-bus 0x83 template before injection.";
+CM_ SG_ 131 LAT_TJA_GATE_BYTE_5 "Active TJA gate byte. Default host value should be 0x80.";
+CM_ SG_ 131 LAT_TJA_GATE_BYTE_6 "Active TJA gate byte. Default host value should be 0x02.";
+CM_ SG_ 131 LAT_TJA_GATE_VALID "Debug helper: true when byte5=0x80 and byte6=0x02.";
+VAL_ 131 LAT_TJA_GATE_BYTE_5 0 "OFF_GATE" 128 "TJA_ACTIVE_DEFAULT" 131 "ALT_ACTIVE_401_ONLY";
+VAL_ 131 LAT_TJA_GATE_BYTE_6 2 "TJA_ACTIVE_DEFAULT" 14 "OFF_GATE";
 
 BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -336,7 +354,7 @@ BO_ 217 PTCAN_ACCELERATOR_CANDIDATE: 8 BMW_I3
  SG_ ACCELERATOR_VALUE_PT_CAN : 16|16@1+ (1,-4096) [0|4000] "" BMW_I3
  SG_ ACCELERATOR_I4_COMPAT_PT_CAN : 16|12@1+ (0.000244,0) [0|2047] "" BMW_I3
 CM_ BO_ 217 "Confirmed PT-CAN accelerator-family frame. The first 16 bits remain useful as upstream positive/coast long-intent helper, while bytes 2:3 are now confirmed as the driver accelerator analog field on the i3. Current isolated pedal routes show 4096 at release and 8096 at full pedal, giving a clean 0..4000 working span after subtracting 4096.";
-CM_ SG_ 217 ACCEL_RAW_PT_CAN "Best current upstream positive/coast long-intent candidate. Cross-route fit against longitudinalPlan.aTarget on 147/148/170/176/177 shows this raw 16-bit field correlates materially better with positive/coast intent than downstream 59/54 words. Current pragmatic managed-mode medians: POS ~63334, COAST ~63364.";
+CM_ SG_ 217 ACCEL_RAW_PT_CAN "Best current upstream positive/coast long-intent candidate. Cross-route fit against longitudinalPlan.aTarget on 147/148/170/176/177 shows this raw 16-bit field separates positive/coast intent materially better than the downstream helper families that were previously tracked.";
 CM_ SG_ 217 ACCELERATOR_WORD23_PT_CAN "Confirmed raw accelerator word from bytes 2:3 on PT-CAN frame 217. Isolated pedal routes show release ~4096 and full pedal ~8096.";
 CM_ SG_ 217 ACCELERATOR_VALUE_PT_CAN "Confirmed driver accelerator analog value on PT-CAN frame 217, derived as bytes2:3 minus 4096. Practical observed range: 0 release to 4000 full pedal.";
 CM_ SG_ 217 ACCELERATOR_I4_COMPAT_PT_CAN "Legacy i4-compatible helper view of frame 217. Keep as comparison/support only; current i3 long fitting works better on the raw 16-bit field than on this compressed 12-bit projection.";
@@ -403,7 +421,7 @@ BO_ 796 PTCAN_BRAKE_PRESSED_CANDIDATE: 8 BMW_I3
  SG_ BRAKE_PRESSED_BYTE_0_PT_CAN : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ BRAKE_PRESSED_BYTE_1_PT_CAN : 8|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 796 "PT-CAN brake/negative-intent helper frame. Byte 1 still separates long negative/coast families and remains useful for longitudinal reverse work, but recent isolated parked brake route 000001a0 shows it is not a reliable standalone brakePressed source.";
-CM_ SG_ 796 BRAKE_PRESSED_RAW_PT_CAN "Best current upstream negative/brake long-intent candidate on PT-CAN. Cross-route fit against longitudinalPlan.aTarget shows this frame separates negative intent more cleanly than downstream 54/59 words, especially when combined with byte1.";
+CM_ SG_ 796 BRAKE_PRESSED_RAW_PT_CAN "Best current upstream negative/brake long-intent candidate on PT-CAN. Cross-route fit against longitudinalPlan.aTarget shows this frame separates negative intent more cleanly than the downstream helper families that were previously tracked, especially when combined with byte1.";
 CM_ SG_ 796 BRAKE_PRESSED_BYTE_1_PT_CAN "Strongest current coarse negative/brake discriminator. Current pragmatic managed-mode negative bucket sits near byte1 ~13, while coast/positive windows stay near the idle range (~0x20..0x2E).";
 
 BO_ 1017 PTCAN_GEAR_CANDIDATE: 8 BMW_I3

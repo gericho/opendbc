@@ -355,6 +355,10 @@ class CarState(CarStateBase):
       0xFF, 0xFF, 0xFF,
       self.stock_lat96_b8 & 0xFF,
     ))
+    lat44 = cp_aux.vl.get("LAT_STOCK_TORQUE_CONTROL_44", {})
+    self.stock_lat44_torque_raw = int(lat44.get("LAT_STOCK_TORQUE_44_RAW", 0))
+    self.stock_lat44_torque_ican_hack_nm = float(lat44.get("LAT_STOCK_TORQUE_44_ICAN_HACK_NM", 0.0))
+
     lat112 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
     lat116 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
     self.stock_lat112_b5 = int(lat112.get("LAT_STOCK_MAIN_BYTE_5", 0))
@@ -575,7 +579,7 @@ class CarState(CarStateBase):
       ("ACC_STALK_TJA_CANDIDATE_B", float("nan")),
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE", float("nan")),
-      ("BRAKE_OR_REGEN_CANDIDATE_A", float("nan")),
+      ("LAT_STOCK_TORQUE_CONTROL_44", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),
     ]

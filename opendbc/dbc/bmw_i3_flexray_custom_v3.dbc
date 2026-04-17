@@ -90,14 +90,47 @@ BO_ 40 DRIVE_STATE: 17 BMW_I3
  SG_ DRIVE_STATE_KIND_BYTE_14 : 112|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 40 "Production drive-state frame. Cross-check against dynm BMW SP2018 FlexRay DBC shows this frame is the closest local match to their maybe_gear_switch frame, and current i3 routes support using its cycle_count plus the byte-11/byte-14 discriminator path as the primary FlexRay gear source in CarState.";
 
-BO_ 44 BRAKE_OR_REGEN_CANDIDATE_A: 17 BMW_I3
- SG_ BRAKE_REGEN_STATE_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ BRAKE_REGEN_STATE_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
- SG_ EPS_ANGLE_PROXY_44_RAW : 105|12@1- (1,0) [-2048|2047] "" BMW_I3
- SG_ EPS_ANGLE_PROXY_44_DEG : 105|12@1- (0.0835794,3.3976) [-720|720] "deg" BMW_I3
- CM_ SG_ 44 BRAKE_REGEN_STATE_A "Experimental secondary longitudinal candidate. It separates some dynamic phases weakly, but remains too indirect to use as a stock command source.";
-CM_ SG_ 44 EPS_ANGLE_PROXY_44_RAW "Legacy experimental steering-angle proxy from earlier route fitting. Keep for debug only. Recent whole-route checks show it often stays nearly flat and it is no longer used for steeringAngleDeg.";
-CM_ SG_ 44 EPS_ANGLE_PROXY_44_DEG "Legacy debug-only steering-angle estimate derived from EPS_ANGLE_PROXY_44_RAW. No production steeringAngleDeg use.";
+BO_ 44 LAT_STOCK_TORQUE_CONTROL_44: 17 BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CYCLE_COUNT : 7|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CHECKSUM_1 : 15|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_COUNTER_1 : 19|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_F_1 : 23|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_D0 : 31|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_E7 : 39|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_BYTE_5_BE : 47|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_BYTE_6 : 48|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_NIBBLE_7 : 59|4@0+ (1,0) [0|7] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_MODE : 67|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_REQUEST_1 : 68|1@0+ (1,0) [0|1] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CHECKSUM_2 : 79|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_COUNTER_2 : 83|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_F_2 : 87|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_RAW : 104|16@1- (1,0) [-32768|32767] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_ALT_WORD_10_11 : 80|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_ALT_WORD_12_13 : 96|16@1- (1,0) [-32768|32767] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_ALT_WORD_14_15 : 112|16@1- (1,0) [-32768|32767] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_ICAN_HACK_NM : 88|12@1+ (0.005,-10) [-10|10.475] "Nm" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_MODE_COPY : 103|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_FF_1 : 111|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_FF_2 : 119|8@0+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_CONST_F_3 : 123|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_REQUEST_2 : 125|2@0+ (1,0) [0|3] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_LKA_STATE : 131|4@0+ (1,0) [0|15] "" BMW_I3
+ SG_ LAT_STOCK_TORQUE_44_REQUEST_3 : 132|1@0+ (1,0) [0|1] "" BMW_I3
+CM_ BO_ 44 "Stock lateral torque/control candidate on the vehicle-side companion stream. Route 58/59 TJA-window analysis points to bytes 13..14 signed little-endian as the strongest local equivalent to 0x33/src1 steering output. Firmware injection follows the I-CAN-hack raw override model: trigger 0x42, target 0x44, cycle mask 0x01, base 0, copy payload bytes 1..16, direction FR3, then update only the FlexRay header cycle/count CRC. Host/openpilot must compute payload CRCs byte1=crc8(byte2..8, init 0xA4) and byte9=crc8(byte10..16, init 0xDC).";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_RAW "Primary local torque/control-like value: raw = int16_le(byte13, byte14). Correlation against 0x33/src1 bytes 3..4 inside managed TJA windows was about +0.847 on route 58 and +0.916 on route 59.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_ALT_WORD_10_11 "Secondary debug word from bytes 10..11. Keep only for comparison while reconstructing the full 0x44 payload.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_ALT_WORD_12_13 "Secondary debug word from bytes 12..13. It correlates less consistently than bytes 13..14 and is not the selected torque value.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_ALT_WORD_14_15 "Secondary debug word from bytes 14..15. Keep only for comparison while reconstructing the full 0x44 payload.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_ICAN_HACK_NM "Reference layout from I-CAN-hack pico-flexray 0x44 EPS_CONTROL torque field: 12-bit unsigned at byte11/bit88, factor 0.005, offset -10 Nm. Included as a cross-check, not selected over the local b13..14 route fit.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_CHECKSUM_1 "Application CRC for the first 0x44 payload block. Host must set this to crc8(payload bytes 2..8, init 0xA4); firmware raw override does not recalculate it.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_CHECKSUM_2 "Application CRC for the second 0x44 payload block. Host must set this to crc8(payload bytes 10..16, init 0xDC); firmware raw override does not recalculate it.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_MODE "I-CAN-hack EPS_CONTROL torque mode field. Their script uses 2 when active, mostly 14 otherwise.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_MODE_COPY "Mirror of LAT_STOCK_TORQUE_44_MODE in the I-CAN-hack EPS_CONTROL layout.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_LKA_STATE "I-CAN-hack EPS_CONTROL LKA state field. Observed/scripted behavior ramps through 0..14 on engage/disengage and typically stays around 5..9 while active.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_REQUEST_2 "I-CAN-hack EPS_CONTROL request state: 1 inactive, 2 active.";
+CM_ SG_ 44 LAT_STOCK_TORQUE_44_REQUEST_3 "I-CAN-hack EPS_CONTROL request bit. Their script sets it to 1 only while not ramping up/down and active.";
+VAL_ 44 LAT_STOCK_TORQUE_44_REQUEST_2 1 "INACTIVE" 2 "ACTIVE";
 
 BO_ 60 LAT_STOCK_TX_TRIGGER_CANDIDATE: 17 BMW_I3
  SG_ LAT_STOCK_TRIGGER_PHASE_BYTE_0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -242,10 +275,8 @@ BO_ 116 ACC_STALK_TJA_CANDIDATE_C: 17 BMW_I3
  SG_ LAT_STOCK_SUPPORT_BYTE_1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_SUPPORT_BYTE_2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_STOCK_SUPPORT_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
- SG_ LAT_STOCK_DASH_MANAGED_CONFIRM_BYTE_5 : 40|8@1+ (1,0) [0|255] "" BMW_I3
 CM_ BO_ 116 "Secondary lateral RX/state helper. Confirmed on historical routes 00000054 and 00000055, present on the modern interface in route 000000b3, and strengthened by managed-TJA route 00000176. Historical logs exposed it on src23; modern dual-FlexRay logging exposes the same frame on src1. It tracks the same assisted-steering phases as 112 and is the best current secondary helper for stock lateral command/echo analysis. Byte5 is not yet a standalone boolean, but it moves through stable phase families alongside 112 and is logged as support evidence for the live stock_lat_active_hint path.";
 CM_ SG_ 116 LAT_STOCK_SUPPORT_BYTE_5 "Secondary state-support byte for stock lateral activity. Not yet a standalone boolean, but it moves through stable phase families alongside frame 112 and is useful as corroborating evidence when validating assisted-steering windows.";
-CM_ SG_ 116 LAT_STOCK_DASH_MANAGED_CONFIRM_BYTE_5 "Debug-only dashboard-managed confirmation helper. On route 00000402--59a94efa08--0, the visible TJA cluster-light activation occurs after the internal managed state and aligns best with a later phase change on frame 116 byte5, including a 0xFF branch around 26.58 s. Use this signal only to search for the driver-visible managed-confirmation point across routes; do not treat it as the internal TJA-active gate.";
 
 BO_ 124 ACC_STALK_TJA_CANDIDATE_D: 17 BMW_I3
  SG_ ACC_STALK_TJA_D_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
@@ -271,8 +302,9 @@ BO_ 131 LAT_TJA_COMMAND_CANDIDATE: 17 BMW_I3
  SG_ LAT_TJA_GATE_VALID : 46|1@1+ (1,0) [0|1] "" BMW_I3
  SG_ LAT_TJA_DIR_RULE_B1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ LAT_TJA_DIR_RULE_B3 : 24|8@1+ (1,0) [0|255] "" BMW_I3
-CM_ BO_ 131 "Mixed stock ADAS state/command frame on src0. Current route-backed work no longer treats this as a pure lateral command. Bytes0/2/7/8 are live OEM structural bytes and should be copied through from the real bus template. Bytes5/6 should normally be sent from the host as the active gate 0x80/0x02. Within the managed longitudinal branch, byte3 behaves like an analog modular value, byte4 counts byte3 wrap events, and the combined word at bytes 3:4 little-endian gives the best current stock-compatible target-speed-like value u = byte3 + 256*byte4. Byte1 remains unresolved and byte2 remains cyclic OEM cadence.";
+CM_ BO_ 131 "Mixed stock ADAS state/command frame on src0. Current route-backed work treats bytes 3:4 little-endian as the active stock longitudinal target-like field, not as a lateral-angle request. Bytes0/1/2/7/8 are live OEM structural or coded bytes and should be copied through from the real bus template. Bytes5/6 should normally be sent from the host as the active gate 0x80/0x02. Within the managed longitudinal branch, byte3 behaves like an analog modular value, byte4 counts byte3 wrap events, and the combined word at bytes 3:4 little-endian gives the best current stock-compatible target-speed-like value u = byte3 + 256*byte4. Byte1 remains unresolved and should currently be preserved from the OEM frame rather than synthesized.";
 CM_ SG_ 131 LAT_TJA_CYCLE "Live OEM cycle/phase byte. Do not synthesize a static value; copy it from the cached real-bus 0x83 template before injection.";
+CM_ SG_ 131 LAT_TJA_BYTE_1 "Live OEM unresolved coded byte. Current analysis does not support treating it as analog steering or a simple CRC/checksum, so preserve it from the cached real-bus 0x83 template before injection.";
 CM_ SG_ 131 LAT_TJA_BYTE_2 "Live OEM cyclic byte. In active TJA it rolls 0xF0..0xFE with no observed exceptions on validated routes; copy it from the cached real-bus 0x83 template before injection.";
 CM_ SG_ 131 LAT_TJA_BYTE_3 "Current best analog stock longitudinal candidate. Treat this as the low byte of the internal target-speed-like value only when paired with LAT_TJA_BYTE_4.";
 CM_ SG_ 131 LAT_TJA_BYTE_4 "Slow wrap counter for LAT_TJA_BYTE_3. It increments on byte3 high-to-low wraps (255->0) and decrements on low-to-high wraps (0->255), giving u = byte3 + 256*byte4.";
@@ -294,7 +326,15 @@ BO_ 135 ACC_TJA_OLD_ROUTE_HELPER_E: 17 BMW_I3
  SG_ ACC_TJA_OLD_E_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_CTRL_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_LONG_MAIN_STATE : 40|16@1+ (1,0) [0|65535] "" BMW_I3
-CM_ BO_ 135 "Primary longitudinal/lateral session-state helper, but no longer a single rigid TJA gate. Historical labeling from 000003ff/00000400/00000402 still holds for the older families: manual -> ...22e0e188a205, ACC-only -> ...2228e260a205, older TJA -> ...2228e2604206 / ...20e0e2403206. Newer realdata route 00000006--e6a3e58043 shows additional valid managed-TJA families that do not fit the old 4206-only rule, especially ...20e0e240e201, ...2228e260e201, ...2228e2608202, and ...2228e2408202. Use 135 together with the 60->72 burst behavior when classifying stock lateral context; 135 alone is no longer sufficient to declare ACC-only vs TJA on newer routes.";
+ SG_ LAT_DRAFT_087_BYTE0 : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_DRAFT_087_BYTE1 : 8|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_DRAFT_087_BYTE2 : 16|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_DRAFT_087_DIR_CODE : 8|6@1+ (1,0) [0|63] "" BMW_I3
+CM_ BO_ 135 "Primary longitudinal/lateral session-state helper, but no longer a single rigid TJA gate. Historical labeling from 000003ff/00000400/00000402 still holds for the older families: manual -> ...22e0e188a205, ACC-only -> ...2228e260a205, older TJA -> ...2228e2604206 / ...20e0e2403206. Newer realdata route 00000006--e6a3e58043 shows additional valid managed-TJA families that do not fit the old 4206-only rule, especially ...20e0e240e201, ...2228e260e201, ...2228e2608202, and ...2228e2408202. Use 135 together with the 60->72 burst behavior when classifying stock lateral context; 135 alone is no longer sufficient to declare ACC-only vs TJA on newer routes. Draft lateral work: on routes 00000401, 00000402, and 00000006, byte1 on this frame is the best current common CAN-only precursor for stock lateral steering activity inside the true lateral windows defined by 0x10D/src0/byte11 == 1.";
+CM_ SG_ 135 LAT_DRAFT_087_BYTE0 "Draft helper only. Byte0 behaves like a 16-state phase/counter byte and does not currently decode to steering content.";
+CM_ SG_ 135 LAT_DRAFT_087_BYTE1 "Draft helper only. Best current common src0 lateral precursor candidate across routes 401, 402, and 006 when evaluated event-by-event inside the true lateral windows (0x10D/src0/byte11 == 1). Treat as a coded/discrete byte, not an analog steering angle.";
+CM_ SG_ 135 LAT_DRAFT_087_BYTE2 "Draft helper only. Byte2 behaves like a rolling phase byte and does not currently decode to steering content.";
+CM_ SG_ 135 LAT_DRAFT_087_DIR_CODE "Draft derived direction code from byte1 low 6 bits. Experimental family rule that currently works around 75% on routes 401, 402, and 006: if (old_byte1 & 0x3F) > 44 then steer right, else steer left. This is not yet a final actuator rule.";
 
 BO_ 241 ACC_TJA_OLD_ROUTE_HELPER_F: 17 BMW_I3
  SG_ ACC_TJA_OLD_F_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3
@@ -324,7 +364,10 @@ BO_ 269 ACC_TJA_OLD_ROUTE_HELPER_H: 17 BMW_I3
  SG_ ACC_TJA_OLD_H_WORD_B : 24|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_H_WORD_C : 40|16@1+ (1,0) [0|65535] "" BMW_I3
  SG_ ACC_TJA_OLD_H_WORD_D : 56|16@1+ (1,0) [0|65535] "" BMW_I3
- CM_ BO_ 269 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. Src13 frame that reacts strongly near ACC/TJA engagement and manual intervention windows.";
+ SG_ LAT_TJA_STATE_10D : 88|8@1+ (1,0) [0|255] "" BMW_I3
+CM_ BO_ 269 "Experimental helper from legacy multi-segment TJA routes 00000054/55/56. Modern route 00000401 identifies byte11 on this frame as the best current stock lateral-TJA state candidate. EDME/EPS route 00000058 confirms the same byte as a clean TJA managed-window indicator: rlog dat[11] changed 0->1 at 8.373s, 1->0 at 88.359s, 0->1 at 118.868s, and 1->0 at 153.652s, matching the video-marked TJA windows after the camera/rlog offset. EDME/EPS route 00000059 confirms the same rule after ecamera/fcamera alignment: dat[11] entered state 1 at 158.034s and left state 1 at 239.663s, matching the user-verified TJA managed video window. Keep the rest of the payload raw until the full frame is understood.";
+CM_ SG_ 269 LAT_TJA_STATE_10D "Best current stock TJA state candidate on frame 0x10D byte11. Current working semantics: 0 = TJA steering button/path not requested; 2 = TJA armed; 3 = TJA longitudinal only active; 1 = TJA managed/lateral-active window confirmed on EDME routes 58/59 and LONG_AND_LATERAL_ACTIVE on previous routes. State 8 marks driver steering override and may also appear when the lead vehicle disappears or becomes too distant for TJA to keep the lateral function engaged. State 16 marks a TJA prerequisite violation or operating-limit violation, for example missing steering-wheel touch or requested curvature outside the valid operating envelope. RX analysis note only: do not use this DBC entry as a TX activation command or synthesize activation from it.";
+ VAL_ 269 LAT_TJA_STATE_10D 0 "STEERING_NOT_REQUESTED" 1 "LONG_AND_LATERAL_ACTIVE" 2 "TJA_ARMED" 3 "LONGITUDINAL_ONLY_ACTIVE" 8 "DRIVER_STEERING_OVERRIDE" 16 "PREREQUISITE_OR_OPERATING_LIMIT_VIOLATION";
 
 BO_ 271 ACC_TJA_OLD_ROUTE_HELPER_I: 17 BMW_I3
  SG_ ACC_TJA_OLD_I_CYCLE : 0|8@1+ (1,0) [0|255] "" BMW_I3

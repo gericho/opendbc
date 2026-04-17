@@ -55,6 +55,9 @@ class CarController(CarControllerBase):
     target_speed_kph = float(CC.hudControl.setSpeed) * CV.MS_TO_KPH
     target_u83 = self._target_speed_kph_to_u83(target_speed_kph)
     target_b3, target_b4 = self._u83_to_b3b4(target_u83)
+    # 0x83 is no longer treated here as a lateral-angle payload.
+    # The only active host-built content is the long target on bytes 3:4 and
+    # the gate on bytes 5:6. Firmware keeps bytes 0/1/2/7/8 live from OEM.
     payload = bytes([
       self.LAT131_SYNTH_CYCLE,
       self.LAT131_SYNTH_BYTE_1,
@@ -89,8 +92,8 @@ class CarController(CarControllerBase):
     tx131 = bytes.fromhex(str(lateral_tx["tx131_hex"]))
     base131 = 0x00
     return [
-      # Host sends [base][payload0..6]. Firmware keeps payload bytes 0/7/8
-      # live from the cached OEM template and overlays payload bytes 1..6.
+      # Host sends [base][payload0..6]. Firmware keeps payload bytes 0/1/2/7/8
+      # live from the cached OEM template and overlays only payload bytes 3..6.
       (131, bytes([base131]) + tx131[:7], 0),
     ]
 

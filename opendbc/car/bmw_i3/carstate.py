@@ -120,6 +120,10 @@ class CarState(CarStateBase):
     self.stock_lat96_b4 = 0
     self.stock_lat96_b8 = 0
     self.stock_lat96_template = bytes([0xFF] * 9)
+    self.stock_lat15_cycle_count = 0
+    self.stock_lat15_raw = 0
+    self.stock_lat15_deg_draft = 0.0
+    self.stock_lat15_real_branch = False
     self.stock_lat112_b5 = 0
     self.stock_lat116_b5 = 0
     self.stock_lat_active_hint = False
@@ -359,6 +363,14 @@ class CarState(CarStateBase):
     self.stock_lat44_torque_raw = int(lat44.get("LAT_STOCK_TORQUE_44_RAW", 0))
     self.stock_lat44_torque_ican_hack_nm = float(lat44.get("LAT_STOCK_TORQUE_44_ICAN_HACK_NM", 0.0))
 
+    lat15 = cp_aux.vl.get("LAT_STOCK_ANGLE_REQUEST_15", {})
+    self.stock_lat15_cycle_count = int(lat15.get("LAT_STOCK_ANGLE_15_CYCLE_RAW", 0))
+    lat15_branch_marker = int(lat15.get("LAT_STOCK_ANGLE_15_BRANCH_MARKER", 0))
+    self.stock_lat15_real_branch = (self.stock_lat15_cycle_count & 0x3) in (0, 2) and lat15_branch_marker == 0xFFFFFFFFFFFFFFFF
+    if self.stock_lat15_real_branch:
+      self.stock_lat15_raw = int(lat15.get("LAT_STOCK_ANGLE_15_RAW", self.stock_lat15_raw))
+      self.stock_lat15_deg_draft = float(lat15.get("LAT_STOCK_ANGLE_15_DEG_DRAFT", self.stock_lat15_deg_draft))
+
     lat112 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_B", {})
     lat116 = cp_aux.vl.get("ACC_STALK_TJA_CANDIDATE_C", {})
     self.stock_lat112_b5 = int(lat112.get("LAT_STOCK_MAIN_BYTE_5", 0))
@@ -580,6 +592,7 @@ class CarState(CarStateBase):
       ("ACC_STALK_TJA_CANDIDATE_C", float("nan")),
       ("DRIVE_STATE", float("nan")),
       ("LAT_STOCK_TORQUE_CONTROL_44", float("nan")),
+      ("LAT_STOCK_ANGLE_REQUEST_15", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_A", float("nan")),
       ("ACC_TJA_OLD_ROUTE_HELPER_B", float("nan")),
     ]

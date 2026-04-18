@@ -17,6 +17,8 @@ class CarController(CarControllerBase):
   LAT131_SYNTH_GATE_6 = 0x02
   LONG83_TARGET_SPEED_GAIN = 0.047815
   LONG83_TARGET_SPEED_OFFSET = -1460.510
+  LAT15_ANGLE_GAIN = 0.011831
+  LAT15_ANGLE_OFFSET = -387.55
   LATERAL_FORCE_WEAKEN_BP = [22.0, 31.0]
   LATERAL_FORCE_WEAKEN_V = [250.0, 250.0]
   def __init__(self, dbc_names, CP, CP_SP):
@@ -49,12 +51,18 @@ class CarController(CarControllerBase):
     u = max(0, min(65535, int(u)))
     return u & 0xFF, (u >> 8) & 0xFF
 
+  @classmethod
+  def _angle_deg_to_u15(cls, angle_deg: float) -> int:
+    raw = int(round((float(angle_deg) - cls.LAT15_ANGLE_OFFSET) / cls.LAT15_ANGLE_GAIN))
+    return max(0, min(65535, raw))
+
   def _build_shadow_lateral_tx(self, CC, CS, desired_angle: float):
     lat_allowed = bool(CC.enabled and CC.latActive)
     trigger_phase = int(getattr(CS, "stock_lat_trigger_phase", 0)) & 0xFF
     target_speed_kph = float(CC.hudControl.setSpeed) * CV.MS_TO_KPH
     target_u83 = self._target_speed_kph_to_u83(target_speed_kph)
     target_b3, target_b4 = self._u83_to_b3b4(target_u83)
+    target_u15 = self._angle_deg_to_u15(desired_angle)
     # 0x83 is no longer treated here as a lateral-angle payload.
     # The only active host-built content is the long target on bytes 3:4 and
     # the gate on bytes 5:6. Firmware keeps bytes 0/1/2/7/8 live from OEM.
@@ -82,6 +90,14 @@ class CarController(CarControllerBase):
       "lat131_target_u83": target_u83,
       "lat131_target_b3": target_b3,
       "lat131_target_b4": target_b4,
+      "lat15_tx_ready": False,
+      "lat15_tx_reason": "firmware_trigger_unproven",
+      "lat15_stock_raw": int(getattr(CS, "stock_lat15_raw", 0)),
+      "lat15_stock_angle_deg_draft": float(getattr(CS, "stock_lat15_deg_draft", 0.0)),
+      "lat15_stock_real_branch": bool(getattr(CS, "stock_lat15_real_branch", False)),
+      "lat15_target_raw_draft": target_u15,
+      "lat15_target_b7": target_u15 & 0xFF,
+      "lat15_target_b8": (target_u15 >> 8) & 0xFF,
       "tx131_hex": payload.hex(),
     }
 

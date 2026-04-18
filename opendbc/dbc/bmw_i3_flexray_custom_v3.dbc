@@ -36,6 +36,21 @@ BU_: BMW_I3
 
 CM_ "Draft DBC derived from BMW i3 FlexRay and PT-CAN logs. Address 27 was not observed in any uploaded segment. Signals below intentionally mix three classes: confirmed parse signals already used by CarState, state/proxy helpers useful for reverse engineering, and unresolved TX candidates kept for shadow-debug correlation.";
 
+BO_ 21 LAT_STOCK_ANGLE_REQUEST_15: 17 BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_CYCLE_RAW : 0|8@1+ (1,0) [0|255] "" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_WORD_1_2 : 8|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_WORD_3_4 : 24|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_WORD_5_6 : 40|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_RAW : 56|16@1+ (1,0) [0|65535] "" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_DEG_DRAFT : 56|16@1+ (0.011831,-387.55) [-720|720] "deg" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_ICAN_48_OFFSET_TEST : 24|16@1+ (0.04395,-1098.75) [-720|720] "deg" BMW_I3
+ SG_ LAT_STOCK_ANGLE_15_BRANCH_MARKER : 72|64@1+ (1,0) [0|18446744073709551615] "" BMW_I3
+CM_ BO_ 21 "Stock angle-request candidate on the EDME-to-EPS side. Local route 58/59 analysis selects bytes 7..8 little-endian, not the I-CAN-hack 0x48 byte3..4 field: correlation against valid 0x33/src24 EPS angle is about +0.980 on route 58 and +0.929 on route 59. Treat only cycle byte0&0x3 == 0 or 2 plus bytes9..16 == FF as the real branch; the other branch is structural zero padding. Firmware TX is intentionally not enabled until the scheduler trigger is proven.";
+CM_ SG_ 21 LAT_STOCK_ANGLE_15_RAW "Primary local angle-request candidate: raw = uint16_le(byte7, byte8). Observed near center around 32768; route-backed draft angle conversion is LAT_STOCK_ANGLE_15_DEG_DRAFT.";
+CM_ SG_ 21 LAT_STOCK_ANGLE_15_DEG_DRAFT "Draft local fit from EDME/EPS routes 58 and 59 against valid 0x33 EPS_STEERING_ANGLE_BMW: angle_deg ~= raw * 0.011831 - 387.55. This is for analysis/openpilot target construction only and must be refined before closed-loop TX.";
+CM_ SG_ 21 LAT_STOCK_ANGLE_15_ICAN_48_OFFSET_TEST "Reference-only I-CAN-hack 0x48 angle layout applied to 0x15 byte3..4. It is kept to compare against their formula, but local logs show byte7..8 is the stronger candidate.";
+CM_ SG_ 21 LAT_STOCK_ANGLE_15_BRANCH_MARKER "Real 0x15 angle branch observed with bytes9..16 all 0xFF; zero branch must be ignored during correlation and TX reconstruction.";
+
 BO_ 49 STEER_TORQUE: 17 BMW_I3
  SG_ STEER_TORQUE_CYCLE_RAW : 0|8@1+ (1,0) [0|255] "" BMW_I3
  SG_ STEER_TORQUE_RAW_WORD_A : 8|16@1+ (1,0) [0|65535] "" BMW_I3
